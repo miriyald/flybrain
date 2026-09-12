@@ -1,6 +1,6 @@
 @echo off
 setlocal
-set TARGETS=flylab tests 01_get_the_data.py 02_explore.py 03_build_circuit.py 04_odour_code.py 05_learn.py
+set TARGETS=flylab tests 01_get_the_data.py 02_explore.py 03_build_circuit.py 04_odour_code.py 05_learn.py 06_recognise_digits.py 07_draw_a_digit.py
 set FAILED=0
 
 echo === ruff ===

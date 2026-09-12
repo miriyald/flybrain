@@ -19,6 +19,9 @@ python 02_explore.py           # find the mushroom body in 21,739 neurons
 python 03_build_circuit.py     # extract the two weight matrices
 python 04_odour_code.py        # sparse coding, and one honest caveat
 python 05_learn.py             # teach it, then test what else changed
+
+python 06_recognise_digits.py  # point the same circuit at pixels
+python 07_draw_a_digit.py      # draw a number in a square and let it read
 ```
 
 Each script narrates itself. Run them in order; they are meant to be read as much as run.
@@ -76,6 +79,53 @@ Three factors have to coincide — the Kenyon cell fired, the output neuron sits
 compartment receiving dopamine, and dopamine is present. No error signal travels backwards.
 Punishment depresses the *approach*-promoting outputs, so the fly learns to avoid a smell by
 unlearning its attraction to it.
+
+## The same circuit, reading digits
+
+Steps 6 and 7 test whether any of this is actually about smell. The mushroom body is a
+classifier that happens to be *wired* for odours — nothing in its architecture is chemical.
+So the odour input is swapped for pixels and **nothing else changes**: same connectome, same
+sparsening, same depression-only learning rule, `flylab/model.py` untouched.
+
+The fly has 55 glomeruli and an 8×8 digit has 64 pixels. The left column of a digit raster is
+exactly zero across all 1,797 samples, so dropping the nine least informative pixels keeps
+99.997% of the variance and leaves one pixel driving one glomerulus.
+
+```
+TEST ACCURACY  84.2%   (chance would be 10%)
+```
+
+One training pass over 1,437 digits, about 0.2 seconds. scikit-learn supplies the data and
+the scoring and trains nothing — every prediction comes out of the fly.
+
+Two results matter more than the accuracy:
+
+| Sparsity | Accuracy |  |
+|---|---|---|
+| 1% | 71.4% | |
+| 2% | 81.7% | |
+| **5%** | **84.2%** | ← the value the fly uses for smells |
+| 10% | 82.5% | |
+| 20% | 82.8% | |
+
+The sparsity tuned for odours is optimal for pixels too. And **one epoch beats three** (84.2%
+vs 78.6%), because depression only ever removes weight — repeated exposure erodes the
+differences it built. The circuit is a general-purpose one-shot classifier, not an olfactory
+specialisation.
+
+Errors are explained by the same overlap metric as the odour work: digits 1 and 8 share 83%
+of their Kenyon cell code and account for 12 of the confusions, which is why 8 is the weakest
+class at 46%.
+
+`07_draw_a_digit.py` opens a square canvas and shows, next to your drawing, the 8×8 image the
+circuit actually receives. That preview is the point — a digit that looks fine to you can
+still arrive unrecognisable, and the preview shows it immediately instead of leaving you
+guessing at a wrong answer. Drawings are cropped, centred and reduced to a 32×32 binary
+bitmap then summed in 4×4 blocks, reproducing how the training data was originally built.
+
+**Verified headlessly, not by hand:** synthetic strokes classify correctly (vertical line →
+1, seven-shape → 7, ellipse → 0), and position and stroke weight provably cannot change the
+answer. The interactive canvas has not been driven with a real mouse.
 
 ## What is real and what is modelled
 
