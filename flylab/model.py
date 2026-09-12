@@ -69,9 +69,14 @@ def kenyon_code(
 
 
 def kwta(drive: npt.NDArray[np.float32], k: int) -> npt.NDArray[np.bool_]:
-    """Keep the k strongest units, silence the rest."""
+    """Keep the k strongest units, silence the rest.
+
+    Ties are broken by index so the winner set is reproducible. Integer-valued inputs make
+    exact ties common, and an arbitrary tie-break would leave the browser port unable to
+    agree with this one.
+    """
     code = np.zeros(drive.size, dtype=np.bool_)
-    code[np.argpartition(drive, -k)[-k:]] = True
+    code[np.argsort(-drive, kind="stable")[:k]] = True
     return code
 
 

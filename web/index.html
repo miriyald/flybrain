@@ -1,0 +1,506 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Mushroom Body Reader</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans:wght@400;500&display=swap">
+<style>
+  :root {
+    --ground: #f2f5f7;
+    --panel: #ffffff;
+    --sunken: #e7ecf0;
+    --line: #d2dbe2;
+    --ink: #121a22;
+    --muted: #5d6f80;
+    --fire: #1f8f56;
+    --fire-dim: #9fd3b6;
+    --amber: #9a6216;
+    --shadow: 0 1px 2px rgba(18, 26, 34, .07);
+    --mono: "IBM Plex Mono", ui-monospace, "Cascadia Mono", Consolas, monospace;
+    --sans: "IBM Plex Sans", system-ui, -apple-system, "Segoe UI", sans-serif;
+  }
+  :root:not([data-theme="light"]) { color-scheme: light; }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      color-scheme: dark;
+      --ground: #0e141b;
+      --panel: #161f29;
+      --sunken: #0a0f15;
+      --line: #263340;
+      --ink: #e2eaf2;
+      --muted: #8397a9;
+      --fire: #5ddb8a;
+      --fire-dim: #2c5f45;
+      --amber: #e0a458;
+      --shadow: 0 1px 2px rgba(0, 0, 0, .4);
+    }
+  }
+  :root[data-theme="dark"] {
+    color-scheme: dark;
+    --ground: #0e141b;
+    --panel: #161f29;
+    --sunken: #0a0f15;
+    --line: #263340;
+    --ink: #e2eaf2;
+    --muted: #8397a9;
+    --fire: #5ddb8a;
+    --fire-dim: #2c5f45;
+    --amber: #e0a458;
+    --shadow: 0 1px 2px rgba(0, 0, 0, .4);
+  }
+
+  * { box-sizing: border-box; }
+  body {
+    background: var(--ground);
+    color: var(--ink);
+    font-family: var(--sans);
+    font-size: 15px;
+    line-height: 1.6;
+    margin: 0;
+    padding-inline: 20px;
+    padding-block: 34px 60px;
+  }
+  .wrap { max-width: 940px; margin: 0 auto; display: flex; flex-direction: column; gap: 30px; }
+
+  header { display: flex; flex-direction: column; gap: 10px; }
+  h1 {
+    font-family: var(--mono);
+    font-weight: 600;
+    font-size: clamp(1.45rem, 4vw, 2rem);
+    letter-spacing: -.02em;
+    margin: 0;
+    text-wrap: balance;
+  }
+  .lede { margin: 0; max-width: 62ch; color: var(--muted); }
+  .lede strong { color: var(--ink); font-weight: 500; }
+  .chips { display: flex; flex-wrap: wrap; gap: 8px; }
+  .chip {
+    font-family: var(--mono);
+    font-size: .72rem;
+    letter-spacing: .04em;
+    text-transform: uppercase;
+    color: var(--muted);
+    border: 1px solid var(--line);
+    border-radius: 3px;
+    padding: 3px 8px;
+  }
+
+  .rig { display: grid; grid-template-columns: minmax(0, 300px) minmax(0, 1fr); gap: 22px; align-items: start; }
+  @media (max-width: 680px) { .rig { grid-template-columns: 1fr; } }
+
+  .padwrap { display: flex; flex-direction: column; gap: 10px; }
+  #pad {
+    width: 100%;
+    max-width: 300px;
+    aspect-ratio: 1;
+    background: var(--sunken);
+    border: 1px solid var(--line);
+    border-radius: 4px;
+    touch-action: none;
+    cursor: crosshair;
+    display: block;
+  }
+  #pad:focus-visible { outline: 2px solid var(--fire); outline-offset: 2px; }
+  .padnote { font-family: var(--mono); font-size: .72rem; color: var(--muted); margin: 0; }
+
+  .controls { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
+  button {
+    font-family: var(--mono);
+    font-size: .78rem;
+    color: var(--ink);
+    background: var(--panel);
+    border: 1px solid var(--line);
+    border-radius: 3px;
+    padding: 5px 11px;
+    cursor: pointer;
+  }
+  button:hover { border-color: var(--fire); color: var(--fire); }
+  button:focus-visible { outline: 2px solid var(--fire); outline-offset: 2px; }
+  .samples { display: flex; flex-wrap: wrap; gap: 4px; align-items: center; }
+  .samples span { font-family: var(--mono); font-size: .72rem; color: var(--muted); margin-right: 2px; }
+  .samples button { padding: 3px 8px; min-width: 27px; }
+
+  .verdict { display: flex; flex-direction: column; gap: 16px; }
+  .call { display: flex; align-items: baseline; gap: 14px; }
+  .glyph {
+    font-family: var(--mono);
+    font-weight: 600;
+    font-size: 4.6rem;
+    line-height: .85;
+    color: var(--fire);
+    font-variant-numeric: tabular-nums;
+  }
+  .callmeta { font-family: var(--mono); font-size: .76rem; color: var(--muted); }
+  .callmeta b { display: block; color: var(--ink); font-weight: 500; font-size: .95rem; }
+
+  .bars { display: flex; flex-direction: column; gap: 5px; }
+  .bar { display: grid; grid-template-columns: 1.3rem minmax(0, 1fr) 3rem; gap: 9px; align-items: center; }
+  .bar span { font-family: var(--mono); font-size: .8rem; font-variant-numeric: tabular-nums; }
+  .bar .track { height: 7px; background: var(--sunken); border-radius: 2px; overflow: hidden; }
+  .bar .fill { height: 100%; background: var(--fire-dim); border-radius: 2px; transition: width .16s ease; }
+  .bar.top .fill { background: var(--fire); }
+  .bar.second .fill { background: var(--amber); }
+  .bar .pct { text-align: right; color: var(--muted); }
+  @media (prefers-reduced-motion: reduce) { .bar .fill { transition: none; } }
+
+  .panel { background: var(--panel); border: 1px solid var(--line); border-radius: 4px; box-shadow: var(--shadow); padding: 16px 18px; }
+  .panel h2 {
+    font-family: var(--mono);
+    font-size: .72rem;
+    font-weight: 500;
+    letter-spacing: .07em;
+    text-transform: uppercase;
+    color: var(--muted);
+    margin: 0 0 12px;
+  }
+
+  .stage { display: grid; grid-template-columns: auto minmax(0, 1fr); gap: 20px; align-items: start; }
+  @media (max-width: 560px) { .stage { grid-template-columns: 1fr; } }
+  #received { image-rendering: pixelated; width: 104px; height: 104px; border: 1px solid var(--line); border-radius: 3px; display: block; }
+  #field { width: 100%; height: auto; display: block; border-radius: 3px; }
+  .caption { font-family: var(--mono); font-size: .7rem; color: var(--muted); margin: 7px 0 0; }
+
+  .prose p { max-width: 66ch; }
+  .prose h3 { font-family: var(--mono); font-size: .9rem; font-weight: 600; margin: 22px 0 6px; }
+  .prose code { font-family: var(--mono); font-size: .86em; color: var(--fire); }
+
+  .flow { display: flex; flex-wrap: wrap; gap: 6px; align-items: stretch; font-family: var(--mono); font-size: .74rem; }
+  .step { flex: 1 1 128px; border: 1px solid var(--line); border-left: 2px solid var(--fire-dim); border-radius: 3px; padding: 8px 10px; }
+  .step b { display: block; font-weight: 500; font-size: .82rem; }
+  .step em { font-style: normal; color: var(--muted); }
+
+  table { border-collapse: collapse; width: 100%; font-family: var(--mono); font-size: .8rem; }
+  th, td { text-align: left; padding: 5px 10px 5px 0; border-bottom: 1px solid var(--line); }
+  th { font-weight: 500; color: var(--muted); font-size: .72rem; text-transform: uppercase; letter-spacing: .05em; }
+  td.num { font-variant-numeric: tabular-nums; text-align: right; padding-right: 0; }
+
+  footer { font-family: var(--mono); font-size: .72rem; color: var(--muted); border-top: 1px solid var(--line); padding-top: 14px; }
+  footer a { color: var(--fire); }
+  img { max-width: 100%; }
+</style>
+</head>
+<body>
+
+<div class="wrap">
+  <header>
+    <h1>Mushroom Body Reader</h1>
+    <p class="lede">
+      Draw a number. It is read by <strong>a fruit fly's olfactory learning circuit</strong> &mdash; the
+      same wiring a fly uses to learn which smells mean trouble, taken from an electron-microscope
+      reconstruction of a real brain and taught to recognise digits instead.
+    </p>
+    <div class="chips">
+      <span class="chip">Janelia hemibrain v1.2</span>
+      <span class="chip">1,927 Kenyon cells</span>
+      <span class="chip">10,670 measured synapses</span>
+      <span class="chip">92.8% on held-out digits</span>
+      <span class="chip">runs in this tab</span>
+    </div>
+  </header>
+
+  <section class="rig">
+    <div class="padwrap">
+      <canvas id="pad" width="300" height="300" tabindex="0" aria-label="Drawing area. Draw a digit with the mouse or a finger."></canvas>
+      <p class="padnote">Draw here, then release</p>
+      <div class="controls">
+        <button id="clear" type="button">Clear</button>
+      </div>
+      <div class="samples">
+        <span>or load a training digit</span>
+      </div>
+      <p class="padnote">Training digits go straight in at 8&nbsp;&times;&nbsp;8. Anything you draw is cropped and reduced first.</p>
+    </div>
+
+    <div class="verdict">
+      <div class="call">
+        <div class="glyph" id="glyph" aria-live="polite">&mdash;</div>
+        <div class="callmeta">
+          <b id="state">reading a sample</b>
+          <span id="cells">&mdash;</span>
+        </div>
+      </div>
+      <div class="bars" id="bars"></div>
+    </div>
+  </section>
+
+  <section class="panel">
+    <h2>Inside the circuit</h2>
+    <div class="stage">
+      <div>
+        <canvas id="received" width="8" height="8" aria-label="The 8 by 8 image the circuit receives"></canvas>
+        <p class="caption">what it receives<br>8 &times; 8, values 0&ndash;16</p>
+      </div>
+      <div>
+        <canvas id="field" width="470" height="410" aria-label="Activity across all 1,927 Kenyon cells"></canvas>
+        <p class="caption" id="fieldcap">1,927 Kenyon cells &mdash; the lit ones are firing</p>
+      </div>
+    </div>
+  </section>
+
+  <section class="prose">
+    <h3>How a smell circuit reads a number</h3>
+    <p>
+      The mushroom body is where a fly stores what it has learned about odours. Its architecture,
+      though, has nothing chemical about it &mdash; it is a general way of turning a crowded input
+      into a tag that is easy to learn from. So it will take pixels just as readily.
+    </p>
+    <div class="flow">
+      <div class="step"><b>55 glomeruli</b><em>one per live pixel</em></div>
+      <div class="step"><b>1,927 Kenyon cells</b><em>real synapse counts</em></div>
+      <div class="step"><b>193 survive</b><em>APL silences the rest</em></div>
+      <div class="step"><b>10 outputs</b><em>approach minus avoid</em></div>
+    </div>
+    <p style="margin-top:16px">
+      The expansion is the important part. Two inputs that arrive looking similar land on almost
+      separate handfuls of Kenyon cells, so teaching the circuit one digit barely disturbs what it
+      knows about the others. Computer science found the same trick independently and calls it
+      locality-sensitive hashing.
+    </p>
+
+    <h3>Learning by forgetting</h3>
+    <p>
+      Nothing here was trained by backpropagation. Dopamine in a fly only ever <em>weakens</em>
+      synapses, so the circuit is taught by spoiling every wrong answer rather than reinforcing the
+      right one &mdash; and a single pass over the training digits works better than repeating them.
+      The whole rule is one line: <code>weights[fired, wrong] *= 0.75</code>.
+    </p>
+    <p>
+      The fly has two dopamine systems and both are used here: one teaches the outputs that pull
+      toward a choice, the other those that push away. Using only half the circuit costs about eight
+      points of accuracy.
+    </p>
+
+    <h3>What is real here</h3>
+    <table>
+      <thead><tr><th>Component</th><th>Source</th><th class="num">Size</th></tr></thead>
+      <tbody>
+        <tr><td>glomerulus &rarr; Kenyon cell</td><td>measured synapse counts</td><td class="num">55 &times; 1,927</td></tr>
+        <tr><td>Kenyon cell &rarr; output</td><td>learned from digits</td><td class="num">1,927 &times; 10</td></tr>
+        <tr><td>sparsening</td><td>modelled &mdash; stands in for APL</td><td class="num">top 193</td></tr>
+        <tr><td>cell excitability</td><td>modelled &mdash; not in the data</td><td class="num">&mdash;</td></tr>
+      </tbody>
+    </table>
+    <p style="margin-top:14px; color:var(--muted)">
+      The wiring is measured biology. The thresholds are not: a connectome records how many synapses
+      join two neurons, never how readily either one fires. That gap is filled by hand here, and it
+      is the honest reason to call this a circuit borrowed from a fly rather than a fly's brain.
+    </p>
+  </section>
+
+  <footer>
+    Connectome data: Janelia hemibrain v1.2 (Scheffer et al., 2020), CC-BY.
+    Digits: UCI optical recognition set, via scikit-learn.
+    Sparse coding as locality-sensitive hashing: Dasgupta, Stevens &amp; Navlakha, <em>Science</em>, 2017.
+  </footer>
+</div>
+
+<script src="flybrain.js"></script>
+<script src="model.js"></script>
+<script>
+  (function () {
+    "use strict";
+    var model = window.FLYBRAIN_MODEL;
+    var pad = document.getElementById("pad");
+    var ctx = pad.getContext("2d");
+    var received = document.getElementById("received").getContext("2d");
+    var field = document.getElementById("field");
+    var fieldCtx = field.getContext("2d");
+    var glyph = document.getElementById("glyph");
+    var stateEl = document.getElementById("state");
+    var cellsEl = document.getElementById("cells");
+    var barsEl = document.getElementById("bars");
+
+    var SIZE = 300, BRUSH = 12;
+    var ink = new Float64Array(SIZE * SIZE);
+    var drawing = false, lastX = 0, lastY = 0;
+
+    var css = getComputedStyle(document.documentElement);
+    function token(name) { return css.getPropertyValue(name).trim(); }
+
+    function paintBackground() {
+      ctx.fillStyle = token("--sunken");
+      ctx.fillRect(0, 0, SIZE, SIZE);
+    }
+
+    function stamp(x, y) {
+      var r = BRUSH;
+      for (var dy = -r; dy <= r; dy++) {
+        var yy = y + dy;
+        if (yy < 0 || yy >= SIZE) continue;
+        for (var dx = -r; dx <= r; dx++) {
+          var xx = x + dx;
+          if (xx < 0 || xx >= SIZE) continue;
+          if (dx * dx + dy * dy <= r * r) ink[yy * SIZE + xx] = 1;
+        }
+      }
+    }
+
+    function line(x0, y0, x1, y1) {
+      var steps = Math.max(Math.abs(x1 - x0), Math.abs(y1 - y0), 1);
+      for (var i = 0; i <= steps; i++) {
+        stamp(Math.round(x0 + ((x1 - x0) * i) / steps), Math.round(y0 + ((y1 - y0) * i) / steps));
+      }
+      ctx.strokeStyle = token("--ink");
+      ctx.lineWidth = BRUSH * 2;
+      ctx.lineCap = "round";
+      ctx.lineJoin = "round";
+      ctx.beginPath();
+      ctx.moveTo(x0, y0);
+      ctx.lineTo(x1, y1);
+      ctx.stroke();
+    }
+
+    function at(event) {
+      var box = pad.getBoundingClientRect();
+      return { x: ((event.clientX - box.left) / box.width) * SIZE, y: ((event.clientY - box.top) / box.height) * SIZE };
+    }
+
+    pad.addEventListener("pointerdown", function (event) {
+      pad.setPointerCapture(event.pointerId);
+      drawing = true;
+      var p = at(event);
+      lastX = p.x; lastY = p.y;
+      line(lastX, lastY, lastX, lastY);
+    });
+    pad.addEventListener("pointermove", function (event) {
+      if (!drawing) return;
+      var p = at(event);
+      line(lastX, lastY, p.x, p.y);
+      lastX = p.x; lastY = p.y;
+    });
+    function finish() { if (drawing) { drawing = false; read(); } }
+    pad.addEventListener("pointerup", finish);
+    pad.addEventListener("pointercancel", finish);
+    pad.addEventListener("pointerleave", finish);
+
+    document.getElementById("clear").addEventListener("click", function () {
+      ink.fill(0);
+      paintBackground();
+      glyph.textContent = "—";
+      stateEl.textContent = "waiting";
+      cellsEl.textContent = "draw a number";
+      renderField(null);
+      received.clearRect(0, 0, 8, 8);
+      received.fillStyle = token("--sunken");
+      received.fillRect(0, 0, 8, 8);
+      renderBars(null);
+      pad.focus();
+    });
+
+    /* Show a digit from the training set and feed it to the circuit directly.
+     * It is already in the circuit's input format, so it must not be pushed back through
+     * the canvas pipeline - that binarises it and throws away the grey levels. */
+    function loadExample(digit) {
+      ink.fill(0);
+      paintBackground();
+      var pixels = model.examples[digit];
+      var scale = SIZE / 8;
+      var ground = hexToRGB(token("--sunken"));
+      var mark = hexToRGB(token("--ink"));
+      for (var r = 0; r < 8; r++) {
+        for (var c = 0; c < 8; c++) {
+          var t = pixels[r * 8 + c] / 16;
+          if (t <= 0) continue;
+          ctx.fillStyle = "rgb(" +
+            Math.round(ground[0] + (mark[0] - ground[0]) * t) + "," +
+            Math.round(ground[1] + (mark[1] - ground[1]) * t) + "," +
+            Math.round(ground[2] + (mark[2] - ground[2]) * t) + ")";
+          ctx.fillRect(c * scale, r * scale, scale + 0.5, scale + 0.5);
+        }
+      }
+      show(window.FlyBrain.readDigit(Float32Array.from(pixels), model), "training digit");
+    }
+
+    var samples = document.querySelector(".samples");
+    for (var d = 0; d < 10; d++) {
+      (function (value) {
+        var button = document.createElement("button");
+        button.type = "button";
+        button.textContent = value;
+        button.setAttribute("aria-label", "Load an example " + value);
+        button.addEventListener("click", function () { loadExample(value); });
+        samples.appendChild(button);
+      })(d);
+    }
+
+    function renderReceived(digit) {
+      var image = received.createImageData(8, 8);
+      var fg = token("--fire"), bg = token("--sunken");
+      var fgRGB = hexToRGB(fg), bgRGB = hexToRGB(bg);
+      for (var i = 0; i < 64; i++) {
+        var t = digit ? digit[i] / 16 : 0;
+        image.data[i * 4] = bgRGB[0] + (fgRGB[0] - bgRGB[0]) * t;
+        image.data[i * 4 + 1] = bgRGB[1] + (fgRGB[1] - bgRGB[1]) * t;
+        image.data[i * 4 + 2] = bgRGB[2] + (fgRGB[2] - bgRGB[2]) * t;
+        image.data[i * 4 + 3] = 255;
+      }
+      received.putImageData(image, 0, 0);
+    }
+
+    function hexToRGB(hex) {
+      var value = hex.replace("#", "");
+      if (value.length === 3) value = value[0] + value[0] + value[1] + value[1] + value[2] + value[2];
+      var n = parseInt(value, 16);
+      return [(n >> 16) & 255, (n >> 8) & 255, n & 255];
+    }
+
+    var COLS = 47, ROWS = 41, DOT = 10;
+    function renderField(code) {
+      field.width = COLS * DOT;
+      field.height = ROWS * DOT;
+      fieldCtx.fillStyle = token("--sunken");
+      fieldCtx.fillRect(0, 0, field.width, field.height);
+      var lit = token("--fire"), dim = token("--fire-dim");
+      for (var i = 0; i < COLS * ROWS; i++) {
+        var on = code && code[i];
+        fieldCtx.fillStyle = on ? lit : dim;
+        fieldCtx.globalAlpha = on ? 1 : 0.22;
+        var x = (i % COLS) * DOT, y = Math.floor(i / COLS) * DOT;
+        fieldCtx.beginPath();
+        fieldCtx.arc(x + DOT / 2, y + DOT / 2, on ? DOT * 0.34 : DOT * 0.17, 0, Math.PI * 2);
+        fieldCtx.fill();
+      }
+      fieldCtx.globalAlpha = 1;
+    }
+
+    function renderBars(result) {
+      barsEl.innerHTML = "";
+      if (!result) return;
+      var scores = result.scores;
+      var min = Infinity, max = -Infinity;
+      for (var i = 0; i < scores.length; i++) { min = Math.min(min, scores[i]); max = Math.max(max, scores[i]); }
+      var spread = max - min || 1;
+      result.ranked.slice(0, 4).forEach(function (candidate, index) {
+        var share = (scores[candidate] - min) / spread;
+        var row = document.createElement("div");
+        row.className = "bar" + (index === 0 ? " top" : index === 1 ? " second" : "");
+        row.innerHTML =
+          '<span>' + candidate + '</span>' +
+          '<span class="track"><span class="fill" style="width:' + (share * 100).toFixed(1) + '%"></span></span>' +
+          '<span class="pct">' + Math.round(share * 100) + '%</span>';
+        barsEl.appendChild(row);
+      });
+    }
+
+    function show(result, source) {
+      if (!result) return;
+      glyph.textContent = result.ranked[0];
+      stateEl.textContent = source;
+      cellsEl.textContent = result.active + " of " + model.kenyonCells + " cells firing";
+      renderReceived(result.digit);
+      renderField(result.code);
+      renderBars(result);
+    }
+
+    function read() {
+      show(window.FlyBrain.read(ink, SIZE, SIZE, model), "your drawing");
+    }
+
+    paintBackground();
+    renderField(null);
+    loadExample(3);
+  })();
+</script>
+</body>
+</html>

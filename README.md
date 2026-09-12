@@ -22,7 +22,10 @@ python 05_learn.py             # teach it, then test what else changed
 
 python 06_recognise_digits.py  # point the same circuit at pixels
 python 07_draw_a_digit.py      # draw a number in a square and let it read
+python 08_export_for_web.py    # export the trained circuit for a browser
 ```
+
+Then open `web/index.html` in a browser for the same demo with no Python running at all.
 
 Each script narrates itself. Run them in order; they are meant to be read as much as run.
 
@@ -136,6 +139,31 @@ bitmap then summed in 4×4 blocks, reproducing how the training data was origina
 strokes classifies correctly (vertical line → 1, seven-shape → 7, ellipse → 0), and position
 and stroke weight provably cannot change the answer. The interactive canvas has not been
 driven with a real mouse.
+
+## The browser demo
+
+`08_export_for_web.py` writes the whole trained circuit to `data/flybrain_web.json` (0.33 MB)
+and to `web/model.js`, which is the same bundle as a script assignment so a page can load it
+without a fetch. Open `web/index.html` and the circuit runs entirely in the tab — no server,
+no Python, no network.
+
+It stays small because of two things. The connectome layer is only 10% dense, so it ships as
+a sparse matrix; and scoring only ever uses `approach - avoid`, so the two readouts collapse
+into one 1927×10 matrix before export.
+
+`web/flybrain.js` is a port of `flylab/digits.py` and `flylab/classifier.py`, and
+`node web/verify.js` checks it against the real Python model on 61 cases — real digits at
+three canvas scales, plus random strokes at awkward sizes. Preprocessing and predictions must
+match exactly, and do.
+
+The Kenyon cell code is allowed a sliver of disagreement, for a reason worth stating: numpy
+sums a float32 matrix product with pairwise summation, while the port accumulates in sparse
+row order. They differ by about 4e-6, which is nothing beside the typical 1e-2 gap at the
+winner boundary — except when two cells tie there exactly, which integer pixel values make
+common. Then one implementation sees a tie and breaks it by index while the other sees a hair
+of difference. Measured: 6 differing cells in 11,773, and no prediction ever changed.
+
+`flylab.model.kwta` breaks ties by index specifically so this stays reproducible.
 
 ## What is real and what is modelled
 
