@@ -23,7 +23,7 @@ from sklearn.datasets import load_digits
 
 from flylab import digits
 from flylab.circuit import Circuit
-from flylab.classifier import FlyClassifier
+from flylab.classifier import MEMORY_PATH, FlyClassifier
 
 CANVAS = 280
 BRUSH = 11
@@ -45,9 +45,8 @@ def _stamp(sheet: npt.NDArray[np.float64], x: int, y: int, radius: int = BRUSH) 
 class DigitPad:
     """A square to draw in, wired to the fly's circuit."""
 
-    def __init__(self, classifier: FlyClassifier, pixels: npt.NDArray[np.int64]) -> None:
+    def __init__(self, classifier: FlyClassifier) -> None:
         self.classifier = classifier
-        self.pixels = pixels
         self.sheet = np.zeros((CANVAS, CANVAS), dtype=np.float64)
         self.last: tuple[int, int] | None = None
 
@@ -104,7 +103,7 @@ class DigitPad:
             return
         self.preview.configure(text="what the circuit receives\n\n" + "\n".join(digits.render(digit)))
 
-        activation = digits.to_glomeruli(digit[None, :], self.pixels)
+        activation = digits.to_glomeruli(digit[None, :], self.classifier.pixels)
         code = self.classifier.encode(activation)[0]
         scores = self.classifier.scores(activation)[0]
         ranked = np.argsort(scores)[::-1]
@@ -122,13 +121,18 @@ class DigitPad:
 
 def main() -> None:
     print(__doc__)
-    images, labels = load_digits(return_X_y=True)
     circuit = Circuit.load()
-    pixels = digits.live_pixels(images, keep=circuit.n_glomeruli)
-    print(f"training on all {len(images)} digits ...")
-    classifier = FlyClassifier.from_circuit(circuit).fit(digits.to_glomeruli(images, pixels), labels)
+    try:
+        classifier = FlyClassifier.load(circuit)
+        print(f"recalling what it learned in step 6: {MEMORY_PATH.name}")
+    except FileNotFoundError:
+        images, labels = load_digits(return_X_y=True)
+        pixels = digits.live_pixels(images, keep=circuit.n_glomeruli)
+        print(f"no saved memory, teaching it {len(images)} digits now ...")
+        classifier = FlyClassifier.from_circuit(circuit, pixels).fit(digits.to_glomeruli(images, pixels), labels)
+        classifier.save()
     print("ready - draw a number in the square, release the mouse to read it\n")
-    DigitPad(classifier, pixels).run()
+    DigitPad(classifier).run()
 
 
 if __name__ == "__main__":

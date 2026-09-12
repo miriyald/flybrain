@@ -49,6 +49,7 @@ module-naming-style = "any"
 [tool.pylint.design]
 max-locals = 25
 max-attributes = 10
+max-args = 7
 
 [tool.pylint."messages control"]
 disable = [

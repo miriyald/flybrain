@@ -44,11 +44,15 @@ per-pixel variance shows the left column of the raster is *exactly* zero across 
 samples, so dropping the nine least informative pixels retains 99.997% of the variance and
 leaves one pixel driving one glomerulus. Variance is measured on the training split only.
 
-**Learning.** The readout starts as all ones, so no class is distinguishable from any other.
-For a sample labelled `y`, the active Kenyon cells' synapses onto every *wrong* class are
-depressed — which is exactly the existing `model.depress` signature with `targets` being
-`ones(10)` with `y` cleared. Prediction is `argmax(code @ readout)`. All discrimination is
+**Learning uses both dopamine systems.** The fly has two: PPL1 signals punishment and teaches
+the compartments whose outputs promote approach; PAM signals reward and teaches the ones that
+promote avoidance. Both act by depression — only the target differs. So there are two
+readouts, each starting flat. A sample labelled `y` punishes every wrong class in the
+approach readout and rewards `y` in the avoid readout, and the verdict is the difference.
+Both calls are the existing `model.depress` with different masks. All discrimination is
 carved out by weakening, never strengthening.
+
+Using punishment alone — the first version — costs about eight points.
 
 **Canvas preprocessing** reproduces how optdigits was originally built: crop to the ink,
 pad to square, reduce to a 32×32 binary bitmap, then sum each 4×4 block for values 0–16.
@@ -66,9 +70,11 @@ Skipping this is the classic reason hand-drawn digits fail against a good classi
 
 ## Open questions
 
-- **8 is the weak class (46%).** It shares 83% of its code with 1. Whether that is inherent
-  to 8×8 rasters or an artifact of the encoding is untested.
-- **One epoch beats three.** Depression-only saturates, so repeated exposure erodes the
+- **1 and 8 share 88% of their code.** Whether that is inherent to 8×8 rasters or an artifact
+  of the encoding is untested.
+- **One epoch still beats more.** Depression-only saturates, so repeated exposure erodes the
   differences it built. A decay or renormalisation term might allow multi-epoch training.
-- **Only the readout learns.** The connectome layer is fixed, as in the fly. Whether
-  adapting it would help is unknown and would depart from the biology.
+- **Only the readout learns.** The connectome layer is fixed, as in the fly. Whether adapting
+  it would help is unknown and would depart from the biology.
+- **Input compression.** Receptor neurons are compressive, and `sqrt(x)` measured within
+  noise of raw input. Not adopted, since it added complexity for no reliable gain.

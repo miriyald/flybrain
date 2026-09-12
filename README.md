@@ -92,30 +92,39 @@ exactly zero across all 1,797 samples, so dropping the nine least informative pi
 99.997% of the variance and leaves one pixel driving one glomerulus.
 
 ```
-TEST ACCURACY  84.2%   (chance would be 10%)
+TEST ACCURACY  92.8%   (chance would be 10%)
 ```
 
-One training pass over 1,437 digits, about 0.2 seconds. scikit-learn supplies the data and
-the scoring and trains nothing — every prediction comes out of the fly.
+One training pass, well under a second. scikit-learn supplies the data and the scoring and
+trains nothing — every prediction comes out of the fly.
 
-Two results matter more than the accuracy:
+**Both dopamine systems are needed.** The fly has two: PPL1 signals punishment and teaches
+the compartments whose outputs promote approach, PAM signals reward and teaches the ones that
+promote avoidance. Both act by depression; only the target differs. An earlier version used
+punishment alone and left about eight points on the table:
 
-| Sparsity | Accuracy |  |
-|---|---|---|
-| 1% | 71.4% | |
-| 2% | 81.7% | |
-| **5%** | **84.2%** | ← the value the fly uses for smells |
-| 10% | 82.5% | |
-| 20% | 82.8% | |
+| | validation accuracy |
+|---|---|
+| punishment only (PPL1) | 84.1% |
+| **punishment + reward (PPL1 + PAM)** | **91.9%** |
 
-The sparsity tuned for odours is optimal for pixels too. And **one epoch beats three** (84.2%
-vs 78.6%), because depression only ever removes weight — repeated exposure erodes the
-differences it built. The circuit is a general-purpose one-shot classifier, not an olfactory
-specialisation.
+Each is scored at its own best depression rate — punishment alone prefers a far gentler one,
+so a shared rate would have rigged the comparison.
 
-Errors are explained by the same overlap metric as the odour work: digits 1 and 8 share 83%
-of their Kenyon cell code and account for 12 of the confusions, which is why 8 is the weakest
-class at 46%.
+**One epoch still beats more.** Depression only ever removes weight, so repeated exposure
+erodes the differences it built. The circuit learns in one shot or not at all.
+
+Errors are explained by the same overlap metric as the odour work: digits 1 and 8 share 88%
+of their Kenyon cell code, and 3 and 9 share 82%.
+
+**Method note:** the data is split three ways and anything tuned is tuned on validation, with
+the test split scored once at the end. An earlier version of this project tuned sparsity
+against the test set and reported an optimistically biased 84.2%.
+
+**What the circuit learned is saved separately from its wiring.** `data/circuit.npz` holds
+the connectome — fixed, measured, never trained. `data/digit_memory.npz` (37 KB) holds the
+two readouts, which is the part that changed through experience. Step 7 recalls that memory
+rather than relearning on every launch.
 
 `07_draw_a_digit.py` opens a square canvas and shows, next to your drawing, the 8×8 image the
 circuit actually receives. That preview is the point — a digit that looks fine to you can
@@ -123,9 +132,10 @@ still arrive unrecognisable, and the preview shows it immediately instead of lea
 guessing at a wrong answer. Drawings are cropped, centred and reduced to a 32×32 binary
 bitmap then summed in 4×4 blocks, reproducing how the training data was originally built.
 
-**Verified headlessly, not by hand:** synthetic strokes classify correctly (vertical line →
-1, seven-shape → 7, ellipse → 0), and position and stroke weight provably cannot change the
-answer. The interactive canvas has not been driven with a real mouse.
+**Verified headlessly, not by hand:** driving the real `DigitPad` class with synthetic
+strokes classifies correctly (vertical line → 1, seven-shape → 7, ellipse → 0), and position
+and stroke weight provably cannot change the answer. The interactive canvas has not been
+driven with a real mouse.
 
 ## What is real and what is modelled
 
