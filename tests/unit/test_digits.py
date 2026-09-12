@@ -80,3 +80,35 @@ def test_render_produces_eight_rows() -> None:
 
 def test_render_handles_an_empty_digit() -> None:
     assert digits.render(np.zeros(64, dtype=np.float32)) == [" " * 16] * 8
+
+
+def test_output_is_height_normalised_like_the_source_set() -> None:
+    """Every optdigits digit spans all eight rows and none spans all eight columns."""
+    tall = digits.bitmap_to_digit(_stroke(40, 120, 200, 30)).reshape(8, 8)
+    rows = np.flatnonzero(tall.sum(axis=1))
+    assert rows.min() == 0 and rows.max() == 7
+    assert tall.sum(axis=0).astype(bool).sum() < 8
+
+
+def test_coverage_is_not_thresholded() -> None:
+    """Grey levels live at the edges of a stroke; rounding them away loses the digit."""
+    diagonal = np.zeros((240, 240))
+    for i in range(240):
+        diagonal[i, max(0, i - 8):i + 8] = 1.0
+    digit = digits.bitmap_to_digit(diagonal)
+    partial = digit[(digit > 0) & (digit < 16)]
+    assert partial.size > 0
+
+
+def test_as_drawn_stays_in_range() -> None:
+    drawn = digits.as_drawn(np.arange(64, dtype=np.float64) % 17)
+    assert drawn.shape == (64,)
+    assert drawn.min() >= 0.0
+    assert drawn.max() <= 16.0
+
+
+def test_augment_stacks_one_copy_per_blur() -> None:
+    images = np.tile(np.arange(64, dtype=np.float64) % 17, (5, 1))
+    stacked = digits.augment(images, blurs=(1, 3))
+    assert stacked.shape == (15, 64)
+    assert np.allclose(stacked[:5], images)

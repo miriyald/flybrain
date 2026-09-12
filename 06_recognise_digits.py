@@ -114,10 +114,12 @@ def main() -> None:
     pixels = digits.live_pixels(train_images, keep=circuit.n_glomeruli)
     report_encoding(train_images, pixels, circuit.n_glomeruli)
 
-    train = (digits.to_glomeruli(train_images, pixels), train_labels)
+    drawn_labels = np.tile(train_labels, 1 + len(digits.DRAWN_BLURS))
+    train = (digits.to_glomeruli(digits.augment(train_images), pixels), drawn_labels)
     validate = (digits.to_glomeruli(validate_images, pixels), validate_labels)
     test = (digits.to_glomeruli(test_images, pixels), test_labels)
-    print(f"\n  train {len(train_labels)}   validate {len(validate_labels)}   test {len(test_labels)}")
+    print(f"\n  train {len(train_labels)} originals + {len(drawn_labels) - len(train_labels)} drawn-style"
+          f"   validate {len(validate_labels)}   test {len(test_labels)}")
 
     report_both_dopamine_systems(circuit, pixels, train, validate)
     report_sparsity_sweep(circuit, pixels, train, validate)
@@ -129,10 +131,14 @@ def main() -> None:
     print(f"  sparsity {classifier.sparsity:.0%} of {circuit.n_kc} Kenyon cells, depression rate {classifier.rate}, one pass")
     print(f"  TEST ACCURACY  {accuracy:.1%}   (chance would be {1 / classifier.n_classes:.0%})")
 
+    drawn_test = digits.to_glomeruli(np.array([digits.as_drawn(image) for image in test_images]), pixels)
+    drawn_accuracy = accuracy_score(test_labels, classifier.predict(drawn_test))
+    print(f"  SAME DIGITS, REDRAWN  {drawn_accuracy:.1%}   (what the drawing pad and browser demo hit)")
+
     matrix = confusion_matrix(test_labels, predictions)
     report_confusion(matrix)
     report_failures(test_images, test_labels, predictions)
-    report_overlap(classifier.encode(train[0]), train_labels, matrix)
+    report_overlap(classifier.encode(train[0]), drawn_labels, matrix)
 
     memory = classifier.fit(*validate).save()
     print(f"\nsaved what it learned: {memory}  ({memory.stat().st_size / 1e3:.0f} KB)")

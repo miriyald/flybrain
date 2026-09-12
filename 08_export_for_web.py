@@ -23,7 +23,7 @@ from flylab.classifier import FlyClassifier
 
 EXPORT_PATH = data.DATA_DIR / "flybrain_web.json"
 WEB_PATH = data.PROJECT_ROOT / "web" / "model.js"
-PRECISION = 7
+PRECISION = 9
 
 
 def _round(values: np.ndarray) -> list[float]:

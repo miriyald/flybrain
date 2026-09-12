@@ -1,6 +1,6 @@
 # Status: Digit recognition with the fly connectome
 
-_Last updated: 2026-09-12_
+_Last updated: 2026-09-13_
 
 ## Current state
 
@@ -25,7 +25,8 @@ with a real mouse — that needs a human.
 
 | Measure | Value |
 |---|---|
-| test accuracy | **92.8%** (chance 10%) |
+| test accuracy | **93.9%** (chance 10%) |
+| same digits redrawn | 79.7% — what the pad and browser hit |
 | punishment only, best rate | 84.1% validation |
 | punishment + reward, best rate | 91.9% validation |
 | optimal sparsity | 9–10%, gently above the 5% used for odours |
@@ -57,3 +58,36 @@ with a real mouse — that needs a human.
 2. Optional: let the canvas teach the circuit — correct a wrong prediction and depress on the
    spot, which is exactly what the odour training loop already does.
 3. Optional: a decay term, which might make multi-epoch training useful rather than harmful.
+
+
+## Round two: reported failures from real use
+
+Two bugs came back from actually drawing on the pad.
+
+**Digit 6 failed consistently.** Not a model weakness — 6 scored 97% on the dataset. The
+drawing pipeline squared the crop before scaling, which widens every digit by about a third
+and closes the loop of a 6 into an 8. Measuring the source set settled it: all 1,797 digits
+span every one of the eight rows and none spans all eight columns, so they are
+height-normalised with width left free. Framing drawings the same way took 6 on redrawn
+digits from failing to 91.7%.
+
+Two further changes came out of the same investigation. Ink coverage is no longer
+thresholded — counting only fully-inked pixels left a drawn digit with just two values, 8 and
+16, where the source digits spread smoothly across 1–16. And `digits.augment` now trains on
+drawn-style copies alongside the originals, worth about twelve points on drawn input for a
+one-point cost on the clean set.
+
+**The drawn line was not smooth.** Two causes: the canvas ignored `devicePixelRatio`, so
+strokes were rendered at a third of the screen's resolution and stretched; and consecutive
+pointer samples were joined with straight lines, leaving a visible corner at every sample.
+Now the backing store matches display density, the path runs quadratic curves through sample
+midpoints, and coalesced pointer events recover the samples the browser batches between
+frames.
+
+**Browser and Python now agree exactly** — 0 differing cells, where before 6 cells in 11,773
+differed. Gain normalisation makes each cell's weights sum to one, so a cell fed only
+saturated pixels scores exactly 16, and a bold drawing can leave 311 cells tied there with
+the winner boundary inside that group. Those sums land within a few parts in 10⁸ of 16, which
+is exactly the rounding midpoint of the nearest float32 — so rounding to float32 balanced
+them on a knife edge instead of merging them. `model.quantise` snaps the drive to a coarse
+grid first, and `kwta` breaks the genuine ties by index.

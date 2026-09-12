@@ -95,7 +95,8 @@ exactly zero across all 1,797 samples, so dropping the nine least informative pi
 99.997% of the variance and leaves one pixel driving one glomerulus.
 
 ```
-TEST ACCURACY  92.8%   (chance would be 10%)
+TEST ACCURACY         93.9%   (chance would be 10%)
+SAME DIGITS, REDRAWN  79.7%   (what the drawing pad and browser demo hit)
 ```
 
 One training pass, well under a second. scikit-learn supplies the data and the scoring and
@@ -117,6 +118,16 @@ so a shared rate would have rigged the comparison.
 **One epoch still beats more.** Depression only ever removes weight, so repeated exposure
 erodes the differences it built. The circuit learns in one shot or not at all.
 
+**Freehand digits are a harder problem than the dataset.** A drawn stroke is thicker and
+harder-edged than the scanned digits, so it lands outside the distribution the circuit was
+taught on — 79.7% rather than 93.9%. Two things close most of that gap. The drawing is framed
+the way optdigits frames its digits: every source digit spans all eight rows and none spans
+all eight columns, so a drawing is scaled to fill the height with its own proportions intact.
+Squaring it instead widens every digit by about a third, which is enough to close the loop of
+a 6 into an 8 — that one bug made 6 fail consistently. And `digits.augment` trains the circuit
+on drawn-style copies alongside the originals, which costs about a point on the clean set to
+gain twelve on drawn input.
+
 Errors are explained by the same overlap metric as the odour work: digits 1 and 8 share 88%
 of their Kenyon cell code, and 3 and 9 share 82%.
 
@@ -132,8 +143,9 @@ rather than relearning on every launch.
 `07_draw_a_digit.py` opens a square canvas and shows, next to your drawing, the 8×8 image the
 circuit actually receives. That preview is the point — a digit that looks fine to you can
 still arrive unrecognisable, and the preview shows it immediately instead of leaving you
-guessing at a wrong answer. Drawings are cropped, centred and reduced to a 32×32 binary
-bitmap then summed in 4×4 blocks, reproducing how the training data was originally built.
+guessing at a wrong answer. Drawings are cropped, scaled to fill the height with their own
+proportions kept, and reduced to 8×8 by summing fractional ink coverage in 4×4 blocks —
+matching how the source digits are framed and shaded.
 
 **Verified headlessly, not by hand:** driving the real `DigitPad` class with synthetic
 strokes classifies correctly (vertical line → 1, seven-shape → 7, ellipse → 0), and position
@@ -142,7 +154,7 @@ driven with a real mouse.
 
 ## The browser demo
 
-`08_export_for_web.py` writes the whole trained circuit to `data/flybrain_web.json` (0.33 MB)
+`08_export_for_web.py` writes the whole trained circuit to `data/flybrain_web.json` (0.39 MB)
 and to `web/model.js`, which is the same bundle as a script assignment so a page can load it
 without a fetch. Open `web/index.html` and the circuit runs entirely in the tab — no server,
 no Python, no network.
@@ -153,17 +165,20 @@ into one 1927×10 matrix before export.
 
 `web/flybrain.js` is a port of `flylab/digits.py` and `flylab/classifier.py`, and
 `node web/verify.js` checks it against the real Python model on 61 cases — real digits at
-three canvas scales, plus random strokes at awkward sizes. Preprocessing and predictions must
-match exactly, and do.
+three canvas scales, plus random strokes at awkward sizes. The match is exact: same 8×8
+input, same Kenyon cells firing, same verdict, zero differing cells.
 
-The Kenyon cell code is allowed a sliver of disagreement, for a reason worth stating: numpy
-sums a float32 matrix product with pairwise summation, while the port accumulates in sparse
-row order. They differ by about 4e-6, which is nothing beside the typical 1e-2 gap at the
-winner boundary — except when two cells tie there exactly, which integer pixel values make
-common. Then one implementation sees a tie and breaks it by index while the other sees a hair
-of difference. Measured: 6 differing cells in 11,773, and no prediction ever changed.
+Getting to exact took understanding one thing. Gain normalisation makes each cell's input
+weights sum to one, so a cell fed only saturated pixels scores **exactly 16** — and a bold
+drawing can leave three hundred cells sitting there at once, with the winner boundary inside
+that group. Which of them fire was then decided by the last bits of a float64 sum, and
+numpy's BLAS and a sparse row loop do not agree on those. Worse, those sums land within a few
+parts in 10⁸ of 16, which is precisely the rounding midpoint of the nearest float32, so
+rounding to float32 balances them on a knife edge rather than merging them.
 
-`flylab.model.kwta` breaks ties by index specifically so this stays reproducible.
+`flylab.model.quantise` snaps the drive to a grid far coarser than the error and far finer
+than any real difference, and `kwta` then breaks the genuine ties by index. Both sides do the
+same, so both pick the same cells.
 
 ## What is real and what is modelled
 

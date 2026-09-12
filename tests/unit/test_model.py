@@ -85,3 +85,20 @@ def test_valence_is_bounded_and_signed() -> None:
 
 def test_valence_of_silence_is_neutral() -> None:
     assert model.valence(np.zeros(4, dtype=np.float32), np.array([1, -1, 1, -1], dtype=np.int8)) == 0.0
+
+
+def test_quantise_merges_values_that_should_be_tied() -> None:
+    """Cells fed only saturated pixels land a few parts in 1e8 either side of the same value."""
+    drive = np.array([16.0, 15.999999523162842, 16.000000476837158], dtype=np.float64)
+    assert len(set(model.quantise(drive).tolist())) == 1
+
+
+def test_quantise_keeps_real_differences_apart() -> None:
+    drive = np.array([16.0, 15.99, 15.9], dtype=np.float64)
+    assert len(set(model.quantise(drive).tolist())) == 3
+
+
+def test_kwta_breaks_ties_by_index() -> None:
+    """With every value equal the lowest indices must win, in any implementation."""
+    code = model.kwta(np.full(10, 4.0, dtype=np.float64), k=3)
+    assert list(np.flatnonzero(code)) == [0, 1, 2]

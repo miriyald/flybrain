@@ -9,7 +9,7 @@
 
   const BITMAP = 32;
   const BLOCK = BITMAP / 8;
-  const MARGIN = 0.15;
+  const DRIVE_GRID = 1e-4;
 
   /* Python's round() breaks ties to even; Math.round breaks them upward. */
   function roundHalfEven(value) {
@@ -20,7 +20,36 @@
     return floor % 2 === 0 ? floor : floor + 1;
   }
 
-  /* Canvas ink -> an 8x8 digit scaled 0-16, matching how optdigits was built. */
+  /* Area-average resize. Averaging rather than sampling keeps thin strokes alive. */
+  function boxResize(image, srcW, srcH, height, width) {
+    const rowEdge = [], colEdge = [];
+    for (let i = 0; i <= height; i++) rowEdge.push(Math.trunc((i * srcH) / height));
+    for (let j = 0; j <= width; j++) colEdge.push(Math.trunc((j * srcW) / width));
+
+    const out = new Float64Array(height * width);
+    for (let i = 0; i < height; i++) {
+      const top = rowEdge[i];
+      const bottom = Math.max(rowEdge[i + 1], top + 1);
+      for (let j = 0; j < width; j++) {
+        const left = colEdge[j];
+        const right = Math.max(colEdge[j + 1], left + 1);
+        let total = 0;
+        for (let y = top; y < bottom; y++) for (let x = left; x < right; x++) total += image[y * srcW + x];
+        out[i * width + j] = total / ((bottom - top) * (right - left));
+      }
+    }
+    return out;
+  }
+
+  /* Canvas ink -> an 8x8 digit scaled 0-16, framed the way optdigits frames digits.
+   *
+   * Every digit in the source set spans all eight rows and none spans all eight columns:
+   * they are height-normalised, with width following the digit's own proportions. Squaring
+   * the crop instead - the obvious thing to do - widens every digit by about a third, which
+   * is enough to close the loop of a 6 into an 8.
+   *
+   * Coverage stays fractional. Counting only fully-inked pixels leaves a drawn digit with
+   * just two values, 8 and 16, where the source digits spread smoothly across 1-16. */
   function bitmapToDigit(ink, width, height) {
     let top = height, left = width, bottom = -1, right = -1;
     for (let y = 0; y < height; y++) {
@@ -35,45 +64,32 @@
     }
     if (bottom < 0) return new Float32Array(64);
 
-    const cropHeight = bottom - top + 1;
-    const cropWidth = right - left + 1;
-    const side = roundHalfEven(Math.max(cropHeight, cropWidth) * (1 + 2 * MARGIN));
-    const padTop = Math.floor((side - cropHeight) / 2);
-    const padLeft = Math.floor((side - cropWidth) / 2);
-
-    const square = new Float64Array(side * side);
-    for (let y = 0; y < cropHeight; y++) {
-      for (let x = 0; x < cropWidth; x++) {
-        square[(padTop + y) * side + padLeft + x] = ink[(top + y) * width + left + x];
-      }
+    const cropH = bottom - top + 1;
+    const cropW = right - left + 1;
+    const crop = new Float64Array(cropH * cropW);
+    for (let y = 0; y < cropH; y++) {
+      for (let x = 0; x < cropW; x++) crop[y * cropW + x] = ink[(top + y) * width + left + x];
     }
 
-    /* Area-average down to 32x32, then threshold. Averaging keeps thin strokes alive. */
-    const edges = [];
-    for (let i = 0; i <= BITMAP; i++) edges.push(Math.trunc((i * side) / BITMAP));
+    const target = Math.min(BITMAP, Math.max(1, roundHalfEven((BITMAP * cropW) / cropH)));
+    const scaled = boxResize(crop, cropW, cropH, BITMAP, target);
+    const offset = Math.floor((BITMAP - target) / 2);
 
-    const digit = new Float32Array(64);
+    /* Accumulate at double precision and narrow once, the way numpy sums then casts.
+     * Adding straight into a Float32Array rounds after every term and drifts apart. */
+    const totals = new Float64Array(64);
     for (let i = 0; i < BITMAP; i++) {
-      const rowStart = edges[i];
-      const rowEnd = Math.max(edges[i + 1], rowStart + 1);
-      for (let j = 0; j < BITMAP; j++) {
-        const colStart = edges[j];
-        const colEnd = Math.max(edges[j + 1], colStart + 1);
-        let total = 0;
-        for (let y = rowStart; y < rowEnd; y++) {
-          for (let x = colStart; x < colEnd; x++) total += square[y * side + x];
-        }
-        if (total > 0) {
-          digit[Math.floor(i / BLOCK) * 8 + Math.floor(j / BLOCK)] += 1;
-        }
+      for (let j = 0; j < target; j++) {
+        const coverage = Math.min(1, Math.max(0, scaled[i * target + j]));
+        totals[Math.floor(i / BLOCK) * 8 + Math.floor((offset + j) / BLOCK)] += coverage;
       }
     }
-    return digit;
+    return Float32Array.from(totals);
   }
 
   /* Drive every Kenyon cell, then let the strongest k percent win - APL's job. */
   function kenyonCode(activation, model) {
-    const drive = new Float32Array(model.kenyonCells);
+    const drive = new Float64Array(model.kenyonCells);
     const { indptr, indices, data } = model.pnToKc;
     for (let g = 0; g < activation.length; g++) {
       const value = activation[g];
@@ -81,7 +97,14 @@
       for (let p = indptr[g]; p < indptr[g + 1]; p++) drive[indices[p]] += value * data[p];
     }
 
-    const order = Array.from(drive.keys()).sort((a, b) => drive[b] - drive[a]);
+    /* Snap to a coarse grid before ranking, matching flylab.model.quantise. A cell fed only
+     * saturated pixels scores exactly 16, and hundreds can sit there together with the
+     * winner boundary inside that group; float noise of a few parts in 10^8 would otherwise
+     * decide which of them fire. floor(x/grid + 0.5) avoids the differing half-way rules of
+     * numpy's round and JavaScript's Math.round. */
+    const ranked = new Float64Array(model.kenyonCells);
+    for (let i = 0; i < drive.length; i++) ranked[i] = Math.floor(drive[i] / DRIVE_GRID + 0.5);
+    const order = Array.from(ranked.keys()).sort((a, b) => ranked[b] - ranked[a] || a - b);
     const code = new Uint8Array(model.kenyonCells);
     for (let i = 0; i < model.k; i++) code[order[i]] = 1;
     return code;
@@ -104,8 +127,7 @@
 
   /* An 8x8 digit in, verdict out - the entry point for dataset samples, which are already
    * in the circuit's input format and must not be pushed back through the canvas pipeline.
-   * Doing that binarises them, saturating every lit cell to 16 and losing the grey levels
-   * the circuit was taught on. */
+   * Re-framing and re-quantising an already-8x8 digit only degrades it. */
   function readDigit(digit, model) {
     if (!digit.some((value) => value > 0)) return null;
 

@@ -8,10 +8,13 @@ dopamine arrived.
 
 from __future__ import annotations
 
+from typing import Any
+
 import numpy as np
 import numpy.typing as npt
 
 SPARSITY = 0.05
+DRIVE_GRID = 1e-4
 
 
 def odour(n_glomeruli: int, rng: np.random.Generator) -> npt.NDArray[np.float32]:
@@ -60,24 +63,46 @@ def kenyon_code(
 
     Expects gain-normalised weights from `normalise_gain`.
 
+    The drive is accumulated at double precision. In float32 the rounding differs between
+    numpy's BLAS and any other summation order by a few parts per million, which is enough
+    to reorder cells sitting close together at the winner boundary and leave the browser
+    port picking a slightly different set.
+
     APL is a single inhibitory neuron contacting every Kenyon cell - all 1,927 of them, as
     the connectome confirms - so the more the population fires, the harder it is held down.
     The steady state of that negative feedback is a k-winners-take-all.
     """
-    drive = activation @ pn_to_kc
+    drive = activation.astype(np.float64) @ pn_to_kc.astype(np.float64)
     return kwta(drive, k=max(1, round(sparsity * drive.size)))
 
 
-def kwta(drive: npt.NDArray[np.float32], k: int) -> npt.NDArray[np.bool_]:
+def kwta(drive: npt.NDArray[np.floating[Any]], k: int) -> npt.NDArray[np.bool_]:
     """Keep the k strongest units, silence the rest.
 
-    Ties are broken by index so the winner set is reproducible. Integer-valued inputs make
-    exact ties common, and an arbitrary tie-break would leave the browser port unable to
-    agree with this one.
+    Ranking happens on a quantised drive with ties broken by index, so the winner set is
+    reproducible across implementations. See `quantise` for why that is not fussiness.
     """
     code = np.zeros(drive.size, dtype=np.bool_)
-    code[np.argsort(-drive, kind="stable")[:k]] = True
+    code[np.argsort(-quantise(drive), kind="stable")[:k]] = True
     return code
+
+
+def quantise(drive: npt.NDArray[np.floating[Any]], grid: float = DRIVE_GRID) -> npt.NDArray[np.float64]:
+    """Snap the drive to a coarse grid so that genuine ties compare equal everywhere.
+
+    Gain normalisation makes each cell's input weights sum to one, so a cell fed only
+    saturated pixels scores exactly 16 in real arithmetic - and a bold drawing can leave
+    three hundred cells sitting there at once, with the winner boundary entirely inside that
+    group. In floating point those sums land a few parts in 10^8 either side of 16, which is
+    precisely the rounding midpoint of the nearest float32; rounding to float32 therefore
+    balances them on a knife edge instead of merging them. A grid far coarser than the error
+    but far finer than any real difference in drive settles it identically in any language.
+
+    Rounding is written as floor(x / grid + 0.5) rather than round(), whose half-way rule
+    differs between numpy and JavaScript.
+    """
+    snapped: npt.NDArray[np.float64] = np.floor(drive / grid + 0.5)
+    return snapped
 
 
 def mbon_response(code: npt.NDArray[np.bool_], kc_to_mbon: npt.NDArray[np.float32]) -> npt.NDArray[np.float32]:
