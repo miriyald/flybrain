@@ -1,0 +1,59 @@
+[project]
+name = "flylab"
+version = "0.1.0"
+description = "Associative learning in the Drosophila mushroom body, on real hemibrain connectome wiring"
+requires-python = ">=3.13"
+dependencies = [
+    "numpy==2.4.6",
+    "pandas==2.3.3",
+    "requests==2.34.2",
+]
+
+[project.optional-dependencies]
+dev = [
+    "flake8==7.1.1",
+    "mypy==1.14.1",
+    "pandas-stubs==3.0.5.260730",
+    "pylint==3.3.3",
+    "pytest==8.3.4",
+    "ruff==0.9.2",
+    "types-requests==2.31.0.0",
+]
+
+[tool.setuptools]
+packages = ["flylab"]
+
+[tool.ruff]
+line-length = 140
+target-version = "py313"
+
+[tool.ruff.lint]
+select = ["E", "F", "W", "I", "N", "UP", "B", "SIM", "ANN", "S"]
+ignore = ["ANN401"]
+
+[tool.ruff.lint.per-file-ignores]
+"tests/*" = ["S101"]
+
+[tool.mypy]
+python_version = "3.13"
+strict = true
+warn_unreachable = true
+
+[tool.pylint.format]
+max-line-length = 140
+
+[tool.pylint.basic]
+module-naming-style = "any"
+
+[tool.pylint.design]
+max-locals = 25
+
+[tool.pylint."messages control"]
+disable = [
+    "too-few-public-methods",
+    "missing-function-docstring",
+    "redefined-outer-name",
+]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
