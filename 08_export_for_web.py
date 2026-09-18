@@ -14,20 +14,14 @@ from __future__ import annotations
 
 import json
 
-import numpy as np
 from sklearn.datasets import load_digits
 
-from flylab import data, model
+from flylab import data, export, model
 from flylab.circuit import Circuit
 from flylab.classifier import FlyClassifier
 
 EXPORT_PATH = data.DATA_DIR / "flybrain_web.json"
-WEB_PATH = data.PROJECT_ROOT / "web" / "model.js"
-PRECISION = 9
-
-
-def _round(values: np.ndarray) -> list[float]:
-    return [float(f"{value:.{PRECISION}g}") for value in values]
+WEB_PATH = data.PROJECT_ROOT / "web" / "digits" / "model.js"
 
 
 def main() -> None:
@@ -35,11 +29,6 @@ def main() -> None:
     circuit = Circuit.load()
     classifier = FlyClassifier.load(circuit)
     weights = model.normalise_gain(circuit.pn_to_kc)
-
-    rows, cols = np.nonzero(weights)
-    order = np.argsort(rows, kind="stable")
-    rows, cols = rows[order], cols[order]
-    indptr = np.searchsorted(rows, np.arange(weights.shape[0] + 1))
 
     net = classifier.approach - classifier.avoid
     images, labels = load_digits(return_X_y=True)
@@ -53,20 +42,16 @@ def main() -> None:
         "sparsity": float(classifier.sparsity),
         "k": int(round(classifier.sparsity * weights.shape[1])),
         "pixels": [int(p) for p in classifier.pixels],
-        "pnToKc": {"indptr": [int(v) for v in indptr], "indices": [int(v) for v in cols], "data": _round(weights[rows, cols])},
-        "readout": _round(net.ravel()),
+        "pnToKc": export.compressed_rows(weights),
+        "readout": export.rounded(net.ravel()),
         "examples": examples,
     }
 
     payload = json.dumps(bundle, separators=(",", ":"))
-    EXPORT_PATH.write_text(payload, encoding="utf-8")
+    export.write_bundle(payload, EXPORT_PATH, WEB_PATH, "FLYBRAIN_MODEL")
 
-    # A browser page cannot fetch the JSON - the artifact CSP blocks XHR - so the same
-    # bundle also ships as a script that simply assigns it.
-    WEB_PATH.parent.mkdir(parents=True, exist_ok=True)
-    WEB_PATH.write_text(f"window.FLYBRAIN_MODEL={payload};\n", encoding="utf-8")
-
-    print(f"  glomerulus -> Kenyon cell : {weights.shape}, {len(cols):,} nonzero ({(weights > 0).mean():.1%} dense)")
+    nonzero = len(bundle["pnToKc"]["indices"])
+    print(f"  glomerulus -> Kenyon cell : {weights.shape}, {nonzero:,} nonzero ({(weights > 0).mean():.1%} dense)")
     print(f"  readout (approach - avoid): {net.shape}")
     print(f"  top {bundle['k']} of {bundle['kenyonCells']} Kenyon cells fire per digit")
     print(f"\nwrote {EXPORT_PATH}  ({EXPORT_PATH.stat().st_size / 1e6:.2f} MB)")

@@ -9,7 +9,9 @@ from __future__ import annotations
 import logging
 import tarfile
 from pathlib import Path
+from typing import Any
 
+import numpy as np
 import pandas as pd
 import requests
 
@@ -86,3 +88,10 @@ def load_connections(data_dir: Path = DATA_DIR) -> pd.DataFrame:
 def load_roi_connections(data_dir: Path = DATA_DIR) -> pd.DataFrame:
     """Per-region weighted edge list: bodyId_pre, bodyId_post, roi, weight."""
     return pd.read_csv(csv_paths(data_dir)[ROI_CONNECTIONS])
+
+
+def save_arrays(path: Path, **arrays: Any) -> Path:
+    """Write a compressed npz, creating the directory if it is not there yet."""
+    path.parent.mkdir(parents=True, exist_ok=True)
+    np.savez_compressed(path, **arrays)
+    return path

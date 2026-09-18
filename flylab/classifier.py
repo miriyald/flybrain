@@ -100,8 +100,7 @@ class FlyClassifier:
 
     def save(self, path: Path = MEMORY_PATH) -> Path:
         """Persist what the circuit learned. The wiring lives in circuit.npz; this is memory."""
-        path.parent.mkdir(parents=True, exist_ok=True)
-        np.savez_compressed(
+        return data.save_arrays(
             path,
             approach=self.approach,
             avoid=self.avoid,
@@ -109,7 +108,6 @@ class FlyClassifier:
             sparsity=np.float64(self.sparsity),
             rate=np.float64(self.rate),
         )
-        return path
 
     @classmethod
     def load(cls, circuit: Circuit, path: Path = MEMORY_PATH) -> FlyClassifier:

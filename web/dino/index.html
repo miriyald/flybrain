@@ -1,0 +1,185 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Mushroom Body Runner</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans:wght@400;500&display=swap">
+<style>
+  :root {
+    --ground: #f2f5f7;
+    --panel: #ffffff;
+    --sunken: #e7ecf0;
+    --line: #d2dbe2;
+    --ink: #121a22;
+    --muted: #5d6f80;
+    --fire: #1f8f56;
+    --amber: #9a6216;
+    --danger: #c0483f;
+    --shadow: 0 1px 2px rgba(18, 26, 34, .07);
+    --mono: "IBM Plex Mono", ui-monospace, "Cascadia Mono", Consolas, monospace;
+    --sans: "IBM Plex Sans", system-ui, -apple-system, "Segoe UI", sans-serif;
+  }
+  :root:not([data-theme="light"]) { color-scheme: light; }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      color-scheme: dark;
+      --ground: #0e141b; --panel: #161f29; --sunken: #0a0f15; --line: #263340;
+      --ink: #e2eaf2; --muted: #8397a9; --fire: #5ddb8a; --amber: #e0a458;
+      --danger: #e8776c; --shadow: 0 1px 2px rgba(0, 0, 0, .4);
+    }
+  }
+  :root[data-theme="dark"] {
+    color-scheme: dark;
+    --ground: #0e141b; --panel: #161f29; --sunken: #0a0f15; --line: #263340;
+    --ink: #e2eaf2; --muted: #8397a9; --fire: #5ddb8a; --amber: #e0a458;
+    --danger: #e8776c; --shadow: 0 1px 2px rgba(0, 0, 0, .4);
+  }
+
+  * { box-sizing: border-box; }
+  body {
+    background: var(--ground); color: var(--ink); font-family: var(--sans);
+    font-size: 15px; line-height: 1.6; margin: 0; padding: 36px 16px 64px;
+  }
+  main { max-width: 1000px; margin: 0 auto; }
+  a { color: var(--fire); }
+  .back { font-family: var(--mono); font-size: 12px; text-decoration: none; }
+  h1 { font-size: 24px; font-weight: 600; margin: 12px 0 6px; letter-spacing: -.01em; }
+  .lede { color: var(--muted); margin: 0 0 22px; }
+
+  .panel {
+    background: var(--panel); border: 1px solid var(--line);
+    border-radius: 10px; box-shadow: var(--shadow); padding: 16px; margin-bottom: 18px;
+  }
+  #stage canvas { display: block; width: 100%; height: auto; image-rendering: pixelated; }
+  #stage { background: var(--sunken); border-radius: 6px; overflow: hidden; }
+
+  .controls { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; margin-top: 12px; }
+  button {
+    font-family: var(--mono); font-size: 12px; padding: 6px 12px; cursor: pointer;
+    background: var(--sunken); color: var(--ink); border: 1px solid var(--line); border-radius: 5px;
+  }
+  button:hover { border-color: var(--fire); }
+  button:disabled { opacity: .45; cursor: default; border-color: var(--line); }
+  button.primary { background: var(--fire); border-color: var(--fire); color: #fff; font-weight: 600; }
+  button.primary:hover { filter: brightness(1.08); }
+  .outcome {
+    font-family: var(--mono); font-size: 12px; color: var(--amber);
+    background: var(--sunken); border: 1px solid var(--line); border-radius: 6px;
+    padding: 8px 12px; margin: 12px 0 0;
+  }
+  .hint { font-family: var(--mono); font-size: 12px; color: var(--muted); }
+
+  .stats { display: flex; gap: 26px; flex-wrap: wrap; font-family: var(--mono); font-size: 12px; margin-top: 12px; }
+  .stats b { display: block; font-size: 20px; font-weight: 600; color: var(--ink); }
+  .stats span { color: var(--muted); text-transform: uppercase; letter-spacing: .06em; }
+
+  .split { display: grid; gap: 18px; grid-template-columns: 340px 1fr; align-items: start; }
+  @media (max-width: 860px) { .split { grid-template-columns: 1fr; } }
+  h2 { font-size: 13px; font-weight: 600; margin: 0 0 12px; text-transform: uppercase; letter-spacing: .06em; color: var(--muted); }
+
+  .row { display: grid; grid-template-columns: 52px 1fr 52px; align-items: center; gap: 10px; margin-bottom: 8px; }
+  .row label { font-family: var(--mono); font-size: 12px; color: var(--muted); }
+  .track { background: var(--sunken); border-radius: 3px; height: 14px; overflow: hidden; }
+  .bar { height: 100%; width: 0; background: #b7c3cd; border-radius: 3px; transition: width .1s linear; }
+  .bar.chosen { background: var(--fire); }
+  .row output { font-family: var(--mono); font-size: 12px; color: var(--muted); text-align: right; }
+
+  #cells { width: 100%; height: auto; display: block; background: var(--sunken); border-radius: 5px; }
+  .caption { font-size: 13px; color: var(--muted); margin: 10px 0 0; }
+  #missing { color: var(--danger); font-family: var(--mono); font-size: 13px; }
+  .notice { color: var(--amber); font-size: 13px; background: var(--sunken); border: 1px solid var(--line); border-radius: 6px; padding: 10px 12px; }
+  .doing { font-family: var(--mono); font-size: 12px; color: var(--muted); margin: 14px 0 0; }
+  .doing b { color: var(--fire); font-weight: 600; }
+  .note { font-size: 13px; color: var(--muted); }
+  .note b { color: var(--ink); font-weight: 500; }
+</style>
+</head>
+<body>
+<main>
+  <a class="back" href="../">&larr; both demos</a>
+  <h1>A fly that learned to jump</h1>
+  <p class="lede">
+    The same 1,927 Kenyon cells that read handwritten digits, playing Chrome&rsquo;s dinosaur game.
+    Taught by nothing but crashing.
+  </p>
+
+  <p id="missing" hidden>model.js is missing &mdash; run <code>python 10_export_the_dino.py</code> first.</p>
+  <p id="plain" class="notice" hidden>
+    Sprite sheet unavailable, so the game is drawn as plain hitboxes &mdash; which is what the
+    circuit actually senses anyway. Run <code>python 10_export_the_dino.py</code> to rebuild
+    <code>sprites.js</code>.
+  </p>
+
+  <div class="panel">
+    <div id="stage"></div>
+    <div class="controls">
+      <button id="pause" class="primary">Play</button>
+      <button id="step">Step one frame</button>
+      <button id="toggle">Show hitboxes</button>
+      <span class="hint">space to play or pause, <b>H</b> for hitboxes</span>
+    </div>
+    <p id="outcome" class="outcome" hidden></p>
+    <div class="stats">
+      <div><b id="frames">0</b><span>frames alive</span></div>
+      <div><b id="cleared">0</b><span>cleared this run</span></div>
+      <div><b id="best">0</b><span>best run</span></div>
+      <div><b id="runs">0</b><span>runs</span></div>
+    </div>
+  </div>
+
+  <div class="split">
+    <div class="panel">
+      <h2>What the readout says</h2>
+      <div class="row"><label>run</label><div class="track"><div class="bar" id="bar0"></div></div><output id="val0">0.0</output></div>
+      <div class="row"><label>jump</label><div class="track"><div class="bar" id="bar1"></div></div><output id="val1">0.0</output></div>
+      <div class="row"><label>duck</label><div class="track"><div class="bar" id="bar2"></div></div><output id="val2">0.0</output></div>
+      <p class="doing">currently <b id="doing">&mdash;</b></p>
+      <p class="caption">
+        Each bar is one output neuron: the approach readout minus the avoid readout, summed over
+        whichever Kenyon cells are firing right now. Both readouts only ever shrink, so the raw
+        numbers are usually negative and only their <i>order</i> means anything &mdash; the bars are
+        scaled between the worst and best on screen, so the fullest one is always the action taken.
+        Mid-air they hold still, because the arc is committed and there is nothing to decide.
+      </p>
+    </div>
+
+    <div class="panel">
+      <h2>Kenyon cells firing</h2>
+      <canvas id="cells" width="640" height="300"></canvas>
+      <p class="caption">
+        All 1,927 of them. About one cell in twenty is lit at any moment &mdash; that sparseness is
+        the whole trick. Watch the pattern turn over as an obstacle closes in.
+      </p>
+    </div>
+  </div>
+
+  <div class="panel">
+    <p class="note">
+      <b>How it learned.</b> There is no label here, only a crash &mdash; and the crash arrives about
+      thirty frames after the decision that caused it. So the synapse holds a decaying tag of what
+      fired recently, and when dopamine finally arrives it acts on the tag. Clearing an obstacle is
+      reward and weakens the <i>avoidance</i> of what was just done; crashing is punishment and
+      weakens the <i>approach</i> to it. Both act only by weakening &mdash; nothing here is ever
+      strengthened, and no error signal travels backwards.
+    </p>
+    <p class="note" style="margin-top:10px">
+      <b>Credit where due.</b> The game, its constants and its sprite sheet are ported from
+      <a href="https://github.com/santifiorino/dino-reinforcement-learning">santifiorino/dino-reinforcement-learning</a>,
+      a Processing sketch that evolves a population of a thousand players with a genetic algorithm
+      &mdash; every hitbox, the jump parabola and the cactus and bird tables here were read from its
+      source. The artwork is originally Chromium's offline dinosaur game. What runs on this page is
+      not that algorithm: there is no population and no evolution, just one circuit learning inside a
+      single lifetime.
+    </p>
+  </div>
+</main>
+
+<script src="p5.min.js"></script>
+<script src="sprites.js"></script>
+<script src="dino-game.js"></script>
+<script src="flydino.js"></script>
+<script src="model.js"></script>
+<script src="sketch.js"></script>
+</body>
+</html>
