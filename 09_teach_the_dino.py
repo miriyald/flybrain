@@ -15,6 +15,11 @@ One number here is not in the connectome: a slow relaxation of every weight back
 baseline. Without it a run of this length drives every synapse to zero and the readout goes
 flat. See `FlyPilot.recover`.
 
+The settings it trains with are `flylab.pilot`'s own defaults. They were chosen by scoring on
+seeds 8000-8099 and are reported below on seeds 9000-9099, which the choice never saw - the
+recovery rate alone is worth a hundred frames, and is exactly the kind of number it would be
+easy to fool yourself about.
+
 Run:  python 09_teach_the_dino.py
 """
 
@@ -28,7 +33,7 @@ from flylab.circuit import Circuit
 from flylab.pilot import Episode, FlyPilot
 
 SEED = 0
-EPISODES = 3000
+EPISODES = 4000
 MAX_FRAMES = 3000
 TEMPERATURE = 2.0
 HELD_OUT = range(9000, 9100)

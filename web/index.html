@@ -1,0 +1,147 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Fly Circuit Demos</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans:wght@400;500&display=swap">
+<style>
+  :root {
+    --ground: #f2f5f7;
+    --panel: #ffffff;
+    --sunken: #e7ecf0;
+    --line: #d2dbe2;
+    --ink: #121a22;
+    --muted: #5d6f80;
+    --fire: #1f8f56;
+    --amber: #9a6216;
+    --shadow: 0 1px 2px rgba(18, 26, 34, .07);
+    --mono: "IBM Plex Mono", ui-monospace, "Cascadia Mono", Consolas, monospace;
+    --sans: "IBM Plex Sans", system-ui, -apple-system, "Segoe UI", sans-serif;
+  }
+  :root:not([data-theme="light"]) { color-scheme: light; }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      color-scheme: dark;
+      --ground: #0e141b;
+      --panel: #161f29;
+      --sunken: #0a0f15;
+      --line: #263340;
+      --ink: #e2eaf2;
+      --muted: #8397a9;
+      --fire: #5ddb8a;
+      --amber: #e0a458;
+      --shadow: 0 1px 2px rgba(0, 0, 0, .4);
+    }
+  }
+  :root[data-theme="dark"] {
+    color-scheme: dark;
+    --ground: #0e141b;
+    --panel: #161f29;
+    --sunken: #0a0f15;
+    --line: #263340;
+    --ink: #e2eaf2;
+    --muted: #8397a9;
+    --fire: #5ddb8a;
+    --amber: #e0a458;
+    --shadow: 0 1px 2px rgba(0, 0, 0, .4);
+  }
+
+  * { box-sizing: border-box; }
+  body {
+    background: var(--ground);
+    color: var(--ink);
+    font-family: var(--sans);
+    font-size: 15px;
+    line-height: 1.6;
+    margin: 0;
+    padding: 48px 16px 64px;
+  }
+  main { max-width: 860px; margin: 0 auto; }
+  h1 { font-size: 26px; font-weight: 600; margin: 0 0 6px; letter-spacing: -.01em; }
+  .lede { color: var(--muted); margin: 0 0 8px; }
+  .thesis {
+    border-left: 2px solid var(--fire);
+    padding: 2px 0 2px 14px;
+    margin: 20px 0 36px;
+    color: var(--muted);
+  }
+  .cards { display: grid; gap: 18px; grid-template-columns: repeat(auto-fit, minmax(320px, 1fr)); }
+  a.card {
+    display: block;
+    background: var(--panel);
+    border: 1px solid var(--line);
+    border-radius: 10px;
+    box-shadow: var(--shadow);
+    padding: 22px;
+    text-decoration: none;
+    color: inherit;
+    transition: border-color .15s, transform .15s;
+  }
+  a.card:hover { border-color: var(--fire); transform: translateY(-2px); }
+  .card h2 { font-size: 17px; font-weight: 600; margin: 0 0 4px; }
+  .card .task { font-family: var(--mono); font-size: 12px; color: var(--amber); text-transform: uppercase; letter-spacing: .06em; }
+  .card p { margin: 10px 0 0; color: var(--muted); font-size: 14px; }
+  .figure {
+    font-family: var(--mono);
+    font-size: 12px;
+    background: var(--sunken);
+    border: 1px solid var(--line);
+    border-radius: 6px;
+    padding: 10px 12px;
+    margin-top: 14px;
+    color: var(--muted);
+    white-space: pre;
+    overflow-x: auto;
+  }
+  footer { margin-top: 44px; color: var(--muted); font-size: 13px; }
+  footer a { color: var(--fire); }
+  code { font-family: var(--mono); font-size: 13px; }
+</style>
+</head>
+<body>
+<main>
+  <h1>One circuit, two jobs</h1>
+  <p class="lede">The <i>Drosophila</i> mushroom body, built from the Janelia hemibrain connectome and run in your browser.</p>
+
+  <p class="thesis">
+    The point is not that a brain was simulated. It is that this circuit implements a computational
+    trick &mdash; sparse random expansion coding &mdash; which computer science independently
+    rediscovered as locality-sensitive hashing. Both demos below are the <b>same 55 glomeruli and the
+    same 1,927 Kenyon cells</b>, wired exactly as the connectome measured them. Only the readout differs,
+    and the readout learns by one rule: synapses that were active when dopamine arrived get weaker.
+    Nothing is ever strengthened.
+  </p>
+
+  <div class="cards">
+    <a class="card" href="digits/">
+      <span class="task">Recognition</span>
+      <h2>Read a handwritten digit</h2>
+      <p>
+        Draw a digit and watch 1,927 Kenyon cells fire. Taught by punishing every wrong answer and
+        rewarding the right one &mdash; the fly's two dopamine systems, both acting by depression.
+      </p>
+      <div class="figure">pixels -> 55 glomeruli -> 1,927 cells -> 10 outputs
+93.9% on held-out digits, from a rule with no gradient</div>
+    </a>
+
+    <a class="card" href="dino/">
+      <span class="task">Control</span>
+      <h2>Learn to play Dino</h2>
+      <p>
+        Harder: there is no label, only a crash &mdash; and it arrives long after the decision that
+        caused it. The synapse holds a decaying tag, so dopamine can still find the moment to blame.
+      </p>
+      <div class="figure">game state -> 55 glomeruli -> 1,927 cells -> 3 actions
+one fly, learning from its own deaths</div>
+    </a>
+  </div>
+
+  <footer>
+    Source, method and the honest list of what is measured versus modelled:
+    <a href="https://github.com/">the repository README</a>.
+    Both pages run entirely client-side &mdash; the trained weights ship with the page.
+  </footer>
+</main>
+</body>
+</html>

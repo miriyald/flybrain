@@ -10,8 +10,9 @@ computational trick — sparse random expansion coding — that computer science
 rediscovered as locality-sensitive hashing, and you can watch it work on the real wiring.
 
 The same circuit, unmodified, then does two more jobs: it reads handwritten digits at 93.9%,
-and it learns to play Chrome's dinosaur game from nothing but crashing. The third one only
-half works, which turns out to be the most informative of the three — see
+and it learns to play Chrome's dinosaur game from nothing but crashing — reaching about 1.8
+times the survival of random play, against a scripted policy that never dies. That third task
+is the one that fails most instructively; see
 [playing Dino](#the-same-circuit-playing-dino).
 
 ## Run it
@@ -216,34 +217,49 @@ into a moving average of how often that action was punished in that state. Flies
 memory decay and extinction are both measured — but the connectome records no such rate, so
 this one is chosen, not derived.
 
-**It works, and not very well.** Median frames survived over 100 runs it never trained on:
+**It works, and it plays badly.** Median frames survived over 100 runs it never trained on:
 
 | | median | mean | best |
 |---|---|---|---|
 | do nothing | 139 | 142 | 236 |
 | act at random | 148 | 168 | 362 |
 | always jump | 159 | 173 | 512 |
-| **the taught circuit** | **176** | **219** | **702** |
+| **the taught circuit** | **262** | **301** | **902** |
 | a hand-written policy | 3,000 | 3,000 | 3,000 |
 
-That is a real effect and a weak one. The scripted policy survives the 3,000-frame cap on every
-seed, so the ceiling is not the game. Across five training seeds the circuit's median ranges
-from 161 to 541 — so any single number from this task is mostly noise, and an earlier draft of
-the spec quoted 707 from a lucky seed before that was caught. Unlike the digit task, the second
-dopamine system does not clearly help here either: 176 against 163, which is inside that spread.
+Comfortably above chance, and nowhere near the ceiling: the scripted policy survives the
+3,000-frame cap on every seed, so the game is not what is stopping it. Repeat the training with
+a different random seed and the median lands anywhere between 184 and 309, so treat one number
+from this task with suspicion — an early draft of the spec quoted 707 from a lucky seed before
+that was caught.
 
 What it learned is legible, which is more interesting than the score:
 
 ```
                  0   50  100  150  200  250  300  350  400  500   <- gap in pixels
-  short cactus run  JUMP JUMP JUMP JUMP JUMP run  JUMP JUMP duck
-  low bird     run  run  run  JUMP run  run  run  run  run  run
+  short cactus run  duck JUMP JUMP JUMP run  run  run  run  run
+  low bird     duck duck duck duck duck duck duck duck duck duck
   middle bird  run  run  run  run  run  run  run  run  run  run
 ```
 
-Cacti are half-right — it jumps, roughly in the right band, smeared wider than the 150–300
-window that actually works. Birds are unlearned: the low one should be ducked and the middle
-one jumped, and it does neither.
+Two of the three are right. It jumps a cactus inside the window that works, and it ducks the
+low bird, which is the only way past it. The middle bird sits at 480, low enough to catch a
+crouching dino, so it has to be jumped — and that one it never learned, which is most of what
+still kills it.
+
+**The number that mattered was the forgetting rate.** Weight recovery was added because
+depression alone drives every synapse to zero; it turned out to be the most consequential
+constant in the task, and it wants to be small. At 0.002 the circuit scored 176; at 0.0002 it
+scores 262. Forget faster than that and a run's learning is erased before the next run can
+build on it. Both the rate and the training length were chosen on a separate block of
+validation seeds and reported here on seeds the choice never saw.
+
+**Training longer does not help**, which is the same wall the digit task hit for the same
+reason: 8,000 runs scored worse than 4,000 at every recovery rate tried, because depression
+only removes weight. Whether the second dopamine system helps here is, honestly, not resolvable
+at this sample size — punishment alone scored 296 against 262 for both systems, on one training
+seed each, when the seed-to-seed spread is 125 wide. The digit task's clean eight-point answer
+has no equivalent here yet.
 
 **The limit is the encoding, not the learning rule.** A cactus 150 pixels away and one 400 away
 share **65%** of their Kenyon cell code, and those two states need opposite actions. Obstacle

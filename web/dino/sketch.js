@@ -109,9 +109,8 @@
     updateControls();
   }
 
-  /* Three states, and the buttons should only ever offer what makes sense in each: stopped
-   * (Play, stepping allowed), running (Pause, stepping meaningless), crashed (Run again,
-   * nothing left to step). */
+  /* Three states, and the button should only ever offer what makes sense in each: stopped
+   * (Play, or Resume once it has been started), running (Pause), crashed (Run again). */
   function updateControls() {
     const play = document.getElementById("pause");
     const running = state.game.alive && !state.paused;
@@ -119,7 +118,6 @@
     else if (running) play.textContent = "Pause";
     else play.textContent = state.started ? "Resume" : "Play";
     play.classList.toggle("primary", !running);
-    document.getElementById("step").disabled = !state.game.alive || running;
   }
 
   function drawSprite(p, slice, x, y) {
@@ -318,15 +316,6 @@
     new p5(sketch, document.getElementById("stage"));
 
     document.getElementById("pause").addEventListener("click", togglePlay);
-
-    document.getElementById("step").addEventListener("click", function () {
-      if (!state.game || !state.game.alive) return;
-      state.started = true;
-      state.paused = true;
-      advance();
-      paintReadout();
-      updateControls();
-    });
 
     document.getElementById("toggle").addEventListener("click", function () {
       state.hitboxes = !state.hitboxes;

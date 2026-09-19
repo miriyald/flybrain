@@ -4,15 +4,16 @@ _Last updated: 2026-09-18_
 
 ## Current state
 
-done, with a weak result — everything builds, tests and verifies; the circuit learns, but not
-well. See Results, and read the caveats before quoting any number.
+done — everything builds, tests and verifies, and the circuit plays at about 1.8x random after
+the recovery rate was tuned on a proper validation split. Still far below a scripted policy,
+and one obstacle type is never handled. Read the caveats before quoting any number.
 
 ## Completed
 
 - **`flylab/dino.py`** — the game, frame-deterministic and seeded. Constants taken from the
   Processing sources directly, not from a summary. 17 tests.
-- **`flylab/pilot.py`** — eligibility trace, both dopamine systems, recovery. 12 tests.
-  `flylab/model.py` is untouched, as required.
+- **`flylab/pilot.py`** — eligibility trace, both dopamine systems, recovery, and the episode
+  loop. 14 tests. `flylab/model.py` is untouched, as required.
 - **`flylab/export.py`** — the CSR packer and numeric rounding, lifted out of
   `08_export_for_web.py` so both exporters cannot drift. Verified inert: re-running `08` after
   the change produced a byte-identical `model.js` (same md5) and the digits parity check still
@@ -25,71 +26,91 @@ well. See Results, and read the caveats before quoting any number.
 
 ## Results
 
-Median frames survived over 100 held-out seeds, cap 3,000. `09_teach_the_dino.py`, training
-seed 0, 3,000 runs.
+Median frames survived over 100 test seeds (9000-9099), cap 3,000. `09_teach_the_dino.py`,
+training seed 0, 4,000 runs, `recovery=0.0002`.
 
 | Policy | Median | Mean | Best |
 |---|---|---|---|
 | do nothing | 139 | 142.2 | 236 |
 | act at random | 148 | 167.8 | 362 |
 | always jump | 159 | 173.4 | 512 |
-| **the taught circuit** | **176** | **218.6** | **702** |
+| **the taught circuit** | **262** | **301.4** | **902** |
 | a hand-written policy (the ceiling) | 3,000 | 3,000 | 3,000 |
 
-**This does not clear the bar the plan set.** The acceptance criterion was "beats uniform-random
-by a margin obviously outside noise". On the shipped model, 176 against 148 is not that. The
-mean and the best run separate more clearly (218.6 against 167.8; 702 against 362), so the
-circuit is doing something — but a median 19% above chance is a weak result and should be read
-as one.
+**This now clears the bar the plan set** — 262 against 148 is well outside noise, and the same
+settings over three training seeds give 262, 184 and 309 on test data they never influenced.
+It is still a long way from the 3,000-frame ceiling a scripted policy reaches on every seed.
 
-Across five training seeds, at 2,000 runs each, the picture is better and much more variable:
+An earlier version of this file reported 176 and concluded the criterion was not met. That was
+the same code with `recovery` ten times too fast; see below.
 
-| | median of medians | range |
+### Hyperparameters were chosen honestly the second time
+
+The first pass chose settings by scoring the same seeds the result was reported on, which is
+leakage and was recorded here as an open issue. Redone: choose on 8000-8099, report on
+9000-9099.
+
+| recovery | episodes | validation |
 |---|---|---|
-| taught circuit | 267 | 161 – 541 |
-| random | ~148 | — |
+| **0.0002** | **4,000** | **226** |
+| 0.0002 | 8,000 | 197 |
+| 0.0005 | 4,000 | 202 |
+| 0.0005 | 8,000 | 182 |
 
-**The second dopamine system does not clearly earn its keep here**, which the digit task's
-ablation did (84.1% against 91.9%):
+Two things fall out. **Recovery is the most consequential number in the task** — 0.002 gives
+176, 0.0002 gives 262 — which is a pleasing result, because it is the one piece of arithmetic
+this task adds to the fly's rule and it now has a measurement behind it rather than a guess.
+Forget an order of magnitude too fast and a run's learning is gone before the next run can
+build on it. And **more training is worse at every recovery rate tested**, the same saturation
+the digit task hit: depression only removes weight.
+
+**Whether the second dopamine system earns its keep is unresolved**, where the digit task got a
+clean eight-point answer (84.1% against 91.9%):
 
 | | Median | Mean | Best |
 |---|---|---|---|
-| punishment alone (PPL1) | 163 | 186.3 | 738 |
-| punishment and reward | 176 | 218.6 | 702 |
+| punishment alone (PPL1) | 296 | 382.0 | 1,702 |
+| punishment and reward | 262 | 301.4 | 902 |
 
-Thirteen frames of median, and punishment-alone has the *better* best run. This is within the
-seed-to-seed noise measured above and should not be reported as a win. The likely reason is
-structural: rewards fire when an obstacle is cleared, but most obstacles are cleared mid-jump,
-and mid-jump outcomes are deliberately not credited — so the PAM pathway sees far fewer events
-than PPL1 does. Testing reward-on-clear separately from punishment-on-crash, rather than
-gating both on the same rule, is the obvious next experiment and is not done.
+Punishment alone scores *higher*. That reads as an argument against half the design, and it is
+not: one training seed per arm, when the same configuration varies from 184 to 309 across
+seeds, cannot separate a 34-frame difference from noise. Several seeds per arm would settle it
+and have not been run. There is also a structural reason to expect PAM to be starved — rewards
+fire when an obstacle is cleared, most obstacles are cleared mid-jump, and mid-jump outcomes
+are deliberately not credited.
 
 **What it actually learned**, from the policy dump:
 
 ```
                  0   50  100  150  200  250  300  350  400  500
-  short cactus run  JUMP JUMP JUMP JUMP JUMP run  JUMP JUMP duck
-  tall cactus  run  duck JUMP JUMP JUMP JUMP run  run  run  run
-  low bird     run  run  run  JUMP run  run  run  run  run  run
+  short cactus run  duck JUMP JUMP JUMP run  run  run  run  run
+  tall cactus  duck duck JUMP JUMP duck duck duck duck duck duck
+  low bird     duck duck duck duck duck duck duck duck duck duck
   middle bird  run  run  run  run  run  run  run  run  run  run
   high bird    run  run  run  run  run  run  run  run  run  run
 ```
 
-Cactus jumping is largely right, if smeared wider than the expert's 150-300 window. Birds are
-essentially unlearned: the low bird should duck and the middle bird should jump, and it does
-neither. The high bird is correct, but only because doing nothing is correct there. So the
-result is "it half-learned one of the two obstacle families".
+Three of five obstacle families are now handled correctly: cacti are jumped inside the window
+that works, the low bird is ducked, and the high bird is correctly ignored. The middle bird at
+480 is the outstanding failure — low enough to catch a crouching dino, so it must be jumped,
+and the circuit runs straight into it. That is roughly one obstacle in six and most of what
+still ends runs.
 
-So the method works, unreliably. Two cautions that matter more than the headline:
+**Why the middle bird is hard, specifically.** Jumping into a bird is a mid-air collision, and
+mid-air outcomes are deliberately not credited, so a jump that flies into a bird is never
+punished and a jump that clears one is never rewarded. The bird case gets almost no teaching
+signal in either direction. Crediting mid-air outcomes globally was measured and is much worse
+(see below), so the fix is not simply to turn that on.
 
-- **Single seeds mean nothing here.** An earlier draft of this file recorded 707, taken from a
-  hyperparameter sweep; the same settings scored 176 when run with a different RNG seed. Any
-  number quoted from one seed on this task is noise.
-- **Training longer made it worse.** Seed 0 scores 234 at 2,000 runs and 176 at 3,000. That
-  echoes the digit task, where one epoch beat three for the same reason — depression only
-  removes weight. `EPISODES` has deliberately *not* been tuned down, because the measurement
-  showing 2,000 is better used the same held-out seeds, and selecting on it would be leakage.
-  A proper validation split is the fix, and it is not done.
+So the method works, and unevenly. Two cautions that matter more than the headline:
+
+- **Single seeds mean little here.** An earlier draft recorded 707 from a sweep; the same
+  settings scored 176 with a different RNG seed. Even the tuned configuration spans 184 to 309
+  across three seeds. Quote the spread, not a number.
+- **Training longer makes it worse**, at every recovery rate tested. Depression only removes
+  weight, so past a few thousand runs more exposure erodes the differences it built — the same
+  effect that made one epoch beat three on digits. `EPISODES` is now chosen on validation seeds
+  rather than left untuned, which was the open issue the first pass left behind.
 
 ## What was learned the hard way
 
@@ -103,7 +124,9 @@ clamped to 500. Everything beyond that means the same thing: keep running.
 cost several wrong turns. An obstacle becomes visible about fifty frames before it can be hit,
 so a crash was blaming fifty decisions, forty-nine of which were taken while the track was
 empty and could not have mattered. The signal was outnumbered roughly thirty to one. Bounding
-the trace to the last three decisions took the median from 146 to 707.
+the trace to the last three decisions took the median from 146 — chance — to 333 in that sweep.
+Both of those are single-seed numbers from before the validation split existed, so read them as
+"nothing" against "clearly something", not as precise quantities.
 
 **A peaked credit kernel did not help, though the reasoning was sound.** Since the decision
 that matters is about twenty frames before impact, and exponential decay puts maximum blame at
@@ -167,14 +190,31 @@ reasoning about it. Three real defects only showed up that way:
    by magnitude drew the longest bar beside the action the circuit least wanted. Bars are now
    scaled between the worst and best score on screen, so the fullest is always the one taken.
 
+4. **The controls offered actions that made no sense.** Dying during play left the button
+   reading "Pause" on a run that had already ended, because `advance()` set the paused flag
+   without refreshing the controls — only the single-step path did. There are exactly three
+   states and the button now derives from them rather than being poked individually:
+
+   | state | button |
+   |---|---|
+   | stopped | Play, or Resume once started |
+   | running | Pause |
+   | crashed | Run again |
+
+   A single-step button existed briefly and was removed as clutter. Worth noting that it was
+   also the only way to drive the game deterministically from a headless browser — Chrome's
+   virtual clock does not advance p5's `deltaTime`, so the render loop stalls at frame zero.
+   Testing the crash path in a browser again would mean reinstating something equivalent.
+
 The demo plays on demand rather than autoplaying, and stops when the fly crashes instead of
-rolling into the next seed, so a crash can be looked at. Verified in Chrome across three
-consecutive runs: 227, 208 and 155 frames, each ending with the run halted and the button
-offering another.
+rolling into the next seed, so a crash can be looked at. Every transition was verified by
+driving the real page in headless Chrome, and three consecutive runs gave 227, 208 and 155
+frames, each halting with the button offering another.
 
 ## Blocked / open issues
 
-- **The headline result is weak and the acceptance criterion is not met.** See Results.
+- **The middle bird is never jumped.** One obstacle in six, and most of what still ends runs.
+  It is the clearest single thing left to fix.
 - **The likely root cause is the encoding, not the learning rule.** A cactus 150 pixels away
   and one 400 away share 65% of their Kenyon cell code, and those two states need opposite
   actions. Obstacle *type* separates cleanly (11% overlap between a cactus and a low bird);
@@ -182,7 +222,6 @@ offering another.
   punishment generalising onto correct jumps — traces back to that 65%. Giving the gap its own
   larger share of the 55 glomeruli, or spacing its tuning curves non-uniformly, is the first
   thing to try and was not tried.
-- **Birds are unlearned.** Two of five obstacle types get the wrong action at every distance.
 - **Reward is starved by design.** Most obstacles are cleared mid-jump, and mid-jump outcomes
   are not credited, so PAM sees far fewer events than PPL1. Decoupling the two would test this.
 - p5.min.js is 1.03 MB, which conflicts with the repository rule against committing artifacts
@@ -210,10 +249,21 @@ offering another.
 
 In the order most likely to move the number:
 
-1. **Give distance more of the input layer.** 65% code overlap between states needing opposite
-   actions is the binding constraint. Try 25 glomeruli for the gap and fewer for width and
-   speed, which barely matter, or non-uniform spacing that is dense below 300 pixels.
-2. **Split the two dopamine events.** Credit mid-jump clears as reward while continuing to
-   ignore mid-jump crashes, which is the asymmetry the A/B never tested.
-3. **Add a validation split** so training duration can be chosen without leaking.
+1. **Teach it the middle bird.** One obstacle in six and the main remaining killer. It needs a
+   jump, and a jump into a bird is a mid-air collision, which is never credited — so the case
+   gets almost no teaching signal. Splitting the two dopamine events is the cheapest probe:
+   credit mid-jump *clears* as reward while continuing to ignore mid-jump crashes. That is the
+   asymmetry the A/B never tested, and unlike the symmetric version it adds no punishment to
+   generalise onto correct jumps.
+2. **Settle the dopamine ablation properly** — several training seeds per arm. One seed each
+   cannot separate 296 from 262 when the same configuration spans 184 to 309.
+3. **Reconsider the glomerular layout, but carefully.** Distance resolution is poor (65% overlap
+   between a cactus 150 away and one 400 away) and sharpening it looks obvious. Measured on the
+   code-overlap proxy, every layout that sharpens distance *degrades* low-bird-versus-middle-bird
+   separation, from 36% to 52-58% — and that is exactly the discrimination the remaining failure
+   needs. The proxy is also non-monotonic: one layout with more gap glomeruli separated distance
+   worse. Do not adopt a layout on overlap numbers alone; train it.
 4. Only then revisit the trace and rate constants.
+
+Done since this list was written: the validation split (item 3 of the old list), which is what
+exposed the recovery rate.
