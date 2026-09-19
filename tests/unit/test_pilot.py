@@ -193,10 +193,22 @@ def test_a_crash_in_mid_air_teaches_nothing() -> None:
     assert not game.alive
     assert episode.frames < 40
     assert float(pilot.approach[:, dino.JUMP].min()) == 1.0
+    assert float(pilot.avoid[:, dino.JUMP].min()) == 1.0
 
 
-def test_an_obstacle_cleared_in_mid_air_is_still_counted() -> None:
-    """It does not teach, but it does have to be reported, or the run's tally is wrong."""
+def test_an_obstacle_cleared_in_mid_air_rewards_the_jump_that_cleared_it() -> None:
+    """The other half of the asymmetry, and the reason it exists.
+
+    A jump leaves the ground on the frame it is chosen and the obstacle passes some fifteen
+    frames later, so every successful jump is completed in the air. While that outcome went
+    uncredited, `avoid[:, JUMP]` stayed at exactly 1.0 across all 1,927 cells for a whole
+    training run: the score is approach minus avoid, so JUMP could never exceed zero while the
+    other two actions reached +0.998, and it won only where they had been punished harder.
+
+    Crashes in mid-air stay uncredited. Punishment is what the earlier A/B showed to be
+    destructive - neighbouring gaps share most of their code, so punishing a mistimed jump
+    punishes the one that would have worked.
+    """
     pilot = _always_jumps()
     game = dino.Game.new(0)
     game.obstacles.clear()
@@ -207,6 +219,19 @@ def test_an_obstacle_cleared_in_mid_air_is_still_counted() -> None:
 
     assert game.alive
     assert episode.cleared == 1
+    assert float(pilot.avoid[:, dino.JUMP].min()) < 1.0
+
+
+def test_a_jump_that_clears_is_not_rewarded_when_reward_is_off() -> None:
+    """The PPL1-only ablation has to be punishment-only in the air as well as on the ground."""
+    pilot = _always_jumps()
+    game = dino.Game.new(0)
+    game.obstacles.clear()
+    game.spawn_timer = 10_000
+    game.obstacles.append(dino.Obstacle(x=350.0, y=470, width=30, height=66))
+
+    pilot.run_episode(game, max_frames=40, reward=False)
+
     assert float(pilot.avoid[:, dino.JUMP].min()) == 1.0
 
 

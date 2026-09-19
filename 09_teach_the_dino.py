@@ -25,6 +25,8 @@ Run:  python 09_teach_the_dino.py
 
 from __future__ import annotations
 
+from collections import Counter
+
 import numpy as np
 import numpy.typing as npt
 
@@ -93,13 +95,44 @@ def train(circuit: Circuit, *, reward: bool, episodes: int = EPISODES) -> tuple[
     return pilot, curve
 
 
-def evaluate(pilot: FlyPilot) -> list[int]:
-    return [play(pilot, seed, None, 0.0, learn=False, reward=False).frames for seed in HELD_OUT]
+def killer(game: dino.Game) -> str:
+    """Which obstacle ended the run. Naming the killer is how 'it never jumps the middle bird'
+    stops being an impression and becomes a number."""
+    for obstacle in game.obstacles:
+        if dino.overlaps(game.box, obstacle.box):
+            if obstacle.height == dino.BIRD_HEIGHT:
+                return {435: "low bird", 480: "middle bird", 370: "high bird"}[obstacle.y]
+            return "tall cactus" if obstacle.height == 96 else "short cactus"
+    return "reached the cap"
+
+
+def evaluate(pilot: FlyPilot) -> tuple[list[int], Counter[str]]:
+    frames: list[int] = []
+    causes: Counter[str] = Counter()
+    for seed in HELD_OUT:
+        game = dino.Game.new(seed)
+        frames.append(pilot.run_episode(game, rng=None, temperature=0.0, learn=False, reward=False).frames)
+        causes[killer(game)] += 1
+    return frames, causes
 
 
 def report(label: str, scores: list[int]) -> None:
     array = np.asarray(scores)
     print(f"  {label:<26} median {int(np.median(array)):>5}   mean {array.mean():>7.1f}   best {array.max():>5}")
+
+
+def readouts(pilot: FlyPilot) -> None:
+    """How far each readout moved. A whole training run once left `avoid` at exactly 1.0 for
+    JUMP on every cell - PAM had never fired on a jump - and nothing in the output said so."""
+    print(f"  {'action':<6}{'approach mean':>15}{'avoid mean':>12}{'cells taught':>14}")
+    for action, name in NAMES.items():
+        taught = int(((pilot.approach[:, action] < 0.99) | (pilot.avoid[:, action] < 0.99)).sum())
+        print(f"  {name:<6}{pilot.approach[:, action].mean():>15.4f}{pilot.avoid[:, action].mean():>12.4f}{taught:>14}")
+
+
+def deaths(causes: Counter[str]) -> None:
+    for cause, count in causes.most_common():
+        print(f"  {cause:<18}{count:>4}")
 
 
 def separability(pilot: FlyPilot) -> None:
@@ -149,15 +182,23 @@ def main() -> None:
     report("do nothing", [fixed(seed, dino.RUN) for seed in HELD_OUT])
     report("always jump", [fixed(seed, dino.JUMP) for seed in HELD_OUT])
     report("act at random", [shuffled(seed, rng) for seed in HELD_OUT])
-    taught = evaluate(pilot)
+    taught, causes = evaluate(pilot)
     report("the taught circuit", taught)
     report("a hand-written policy", [scripted(seed) for seed in HELD_OUT])
 
     print("\n" + "=" * 78)
     print("Does the second dopamine system earn its keep?\n")
     punished_only, _ = train(circuit, reward=False)
-    report("punishment alone (PPL1)", evaluate(punished_only))
+    report("punishment alone (PPL1)", evaluate(punished_only)[0])
     report("punishment and reward", taught)
+
+    print("\n" + "=" * 78)
+    print("How much each readout moved\n")
+    readouts(pilot)
+
+    print("\n" + "=" * 78)
+    print("What ended each of the 100 runs\n")
+    deaths(causes)
 
     print("\n" + "=" * 78)
     print("What it decided to do, by how far away the obstacle is\n")

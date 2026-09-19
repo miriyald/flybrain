@@ -10,7 +10,7 @@ computational trick — sparse random expansion coding — that computer science
 rediscovered as locality-sensitive hashing, and you can watch it work on the real wiring.
 
 The same circuit, unmodified, then does two more jobs: it reads handwritten digits at 93.9%,
-and it learns to play Chrome's dinosaur game from nothing but crashing — reaching about 1.8
+and it learns to play Chrome's dinosaur game from nothing but crashing — reaching about 2.7
 times the survival of random play, against a scripted policy that never dies. That third task
 is the one that fails most instructively; see
 [playing Dino](#the-same-circuit-playing-dino).
@@ -217,56 +217,97 @@ into a moving average of how often that action was punished in that state. Flies
 memory decay and extinction are both measured — but the connectome records no such rate, so
 this one is chosen, not derived.
 
-**It works, and it plays badly.** Median frames survived over 100 runs it never trained on:
+**It works.** Median frames survived over 100 runs it never trained on:
 
 | | median | mean | best |
 |---|---|---|---|
 | do nothing | 139 | 142 | 236 |
 | act at random | 148 | 168 | 362 |
 | always jump | 159 | 173 | 512 |
-| **the taught circuit** | **262** | **301** | **902** |
+| **the taught circuit** | **749** | **779** | **3,000** |
 | a hand-written policy | 3,000 | 3,000 | 3,000 |
 
-Comfortably above chance, and nowhere near the ceiling: the scripted policy survives the
-3,000-frame cap on every seed, so the game is not what is stopping it. Repeat the training with
-a different random seed and the median lands anywhere between 184 and 309, so treat one number
-from this task with suspicion — an early draft of the spec quoted 707 from a lucky seed before
-that was caught.
+That is the run this repository ships, and it is one of the better ones. **Quote the spread, not
+the number.** Repeat the training with ten different random seeds and the median lands anywhere
+between 182 and 854, with a median-of-medians of 406 — an early draft of the spec quoted 707
+from a lucky seed before that was caught. The ceiling is still untouched: the scripted policy
+survives the 3,000-frame cap on every seed, so the game is not what is stopping it.
+
+**The one change that mattered was where dopamine could reach.** A jump leaves the ground on
+the frame it is chosen and the obstacle passes some fifteen frames later, so *every successful
+jump finishes in the air* — and the training loop learned only from frames the dino was
+standing on. The consequence was invisible for the whole project until the weights were dumped:
+
+| readout | approach mean | avoid mean | cells taught |
+|---|---|---|---|
+| RUN | 0.830 | 0.920 | 633 |
+| **JUMP** | 0.882 | **1.000** | **0 of 1,927** |
+| DUCK | 0.825 | 0.924 | 616 |
+
+`avoid` for JUMP sat at exactly 1.0 on every one of the 1,927 Kenyon cells. Reward had never
+once fired on a jump in four thousand runs. Since a score is `approach − avoid` and depression
+only removes weight, **JUMP's score could not rise above zero** while the other two reached
++0.998; it never competed, it only survived where the others had been punished harder.
+
+Rewarding an obstacle cleared in mid-air — the same `reward()` on the same trace, which was
+already holding the jump — takes the median-of-medians from 262 to 327 on validation seeds
+(25 training seeds per arm, one-sided Mann-Whitney *p* = 0.013), the mean from 268 to 413, and
+the share of training seeds that get past 400 frames from 4% to 44%.
+
+Crashes in mid-air are still ignored, and that asymmetry is the point. Crediting both was
+measured earlier and was much worse, because neighbouring gaps share 77–99% of their Kenyon
+code: punishing a jump mistimed by ten pixels also punishes the jump that would have worked.
+Praise generalising onto a neighbouring jump costs nothing; punishment generalising onto one
+destroys the policy.
+
+**Among the constants, the forgetting rate is still the one that matters.** Weight recovery was
+added because depression alone drives every synapse to zero, and it wants to be small: at 0.002
+the circuit scored 176, at 0.0002 it scored 262. Re-swept after the change above — the event
+rate it is measured against roughly doubled, so its tuned value could not be assumed — 0.0002
+came out best again, ahead of both 0.0001 and 0.0005. Every constant here was chosen on a
+separate block of validation seeds and reported on seeds the choice never saw.
+
+**It also settles the ablation this task could not previously answer.** With ten training seeds
+per arm on the test seeds, both dopamine systems give 406 against 214 for punishment alone
+(*p* = 0.016). The earlier result — punishment alone appearing to *win*, 296 to 262 — was an
+artefact of the same bug: PAM had no function to lose.
+
+| | median-of-medians | mean | spread across 10 seeds |
+|---|---|---|---|
+| punishment and reward | **406** | 443 | 182 – 854 |
+| punishment alone (PPL1) | 214 | 211 | 173 – 229 |
+
+**And it overturns "training longer makes it worse."** That was true when reward never fired —
+depression only removes weight, so more exposure eroded what little structure existed. With PAM
+working, the curve flattens instead of falling: 1,000 runs give 166, 2,000 give 299, 4,000 give
+367 and 8,000 give 374. Saturation, not decay. 4,000 is kept because 8,000 costs twice as much
+for nothing.
 
 What it learned is legible, which is more interesting than the score:
 
 ```
                  0   50  100  150  200  250  300  350  400  500   <- gap in pixels
-  short cactus run  duck JUMP JUMP JUMP run  run  run  run  run
-  low bird     duck duck duck duck duck duck duck duck duck duck
-  middle bird  run  run  run  run  run  run  run  run  run  run
+  short cactus run  run  JUMP JUMP JUMP JUMP run  run  run  run
+  low bird     run  run  JUMP JUMP JUMP run  run  run  run  run
+  middle bird  run  run  JUMP JUMP JUMP JUMP JUMP JUMP run  run
 ```
 
-Two of the three are right. It jumps a cactus inside the window that works, and it ducks the
-low bird, which is the only way past it. The middle bird sits at 480, low enough to catch a
-crouching dino, so it has to be jumped — and that one it never learned, which is most of what
-still kills it.
+**The middle bird is solved, and the low bird broke.** The bird at 480 is low enough to catch a
+crouching dino, so it has to be jumped; the circuit never once jumped it before and now does,
+across the widest window of any obstacle. But DUCK has been extinguished in the process — it
+appears nowhere above — and the low bird, which the old circuit ducked reliably, is now the
+single largest cause of death, 54 of 100 runs. Jumping clears a low bird too, but only on a
+tighter window than the one it learned. One failure has been traded for another, on much better
+terms: the net is 262 to 749 on the shipped seed.
 
-**The number that mattered was the forgetting rate.** Weight recovery was added because
-depression alone drives every synapse to zero; it turned out to be the most consequential
-constant in the task, and it wants to be small. At 0.002 the circuit scored 176; at 0.0002 it
-scores 262. Forget faster than that and a run's learning is erased before the next run can
-build on it. Both the rate and the training length were chosen on a separate block of
-validation seeds and reported here on seeds the choice never saw.
-
-**Training longer does not help**, which is the same wall the digit task hit for the same
-reason: 8,000 runs scored worse than 4,000 at every recovery rate tried, because depression
-only removes weight. Whether the second dopamine system helps here is, honestly, not resolvable
-at this sample size — punishment alone scored 296 against 262 for both systems, on one training
-seed each, when the seed-to-seed spread is 125 wide. The digit task's clean eight-point answer
-has no equivalent here yet.
-
-**The limit is the encoding, not the learning rule.** A cactus 150 pixels away and one 400 away
-share **65%** of their Kenyon cell code, and those two states need opposite actions. Obstacle
-*type* separates cleanly — a cactus and a low bird at the same distance share only 11% — but
-*distance* does not, and distance is what jumping is about. Every failure traces back to that
-number, including the one below. Spending more of the 55 glomeruli on the gap is the obvious
-next move and has not been tried.
+**The limit is the encoding, and now there is a second reason to think so.** A cactus 150 pixels
+away and one 400 away share **65%** of their Kenyon cell code, and those two states need
+opposite actions. Obstacle *type* separates cleanly — a cactus and a low bird at the same
+distance share only 11% — but *distance* does not, and distance is what jump timing is. That
+also explains why DUCK collapsed: praise for jumping generalises across distance far more
+readily than the narrow band where ducking is the better answer. Spending more of the 55
+glomeruli on the gap is the obvious next move and has not been tried; the one measurement made
+against it warns that every layout which sharpens distance blurs low-bird-versus-middle-bird.
 
 **One finding worth keeping.** The training loop ignores what happens during a jump. Since a
 jump lasts 34 frames, most obstacles are both cleared and crashed into while airborne, so this

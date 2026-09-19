@@ -48,11 +48,19 @@
 
   const CELL_COLS = 64;
 
+  /* A fresh obstacle sequence per run, and per page load. The seed was fixed at 1, so every
+   * visit replayed one identical game and the demo looked like a canned animation. Only the
+   * track is drawn at random: the circuit's own choices stay deterministic, because argmax over
+   * the trained readout is exactly what the parity check against Python asserts. */
+  function freshSeed() {
+    return 1 + Math.floor(Math.random() * 1000000);
+  }
+
   const state = {
     game: null,
     model: null,
     decision: null,
-    seed: 1,
+    seed: freshSeed(),
     runs: 0,
     best: 0,
     cleared: 0,
@@ -303,7 +311,7 @@
 
   function togglePlay() {
     if (!state.game) return;
-    if (!state.game.alive) startRun(state.seed + 1);
+    if (!state.game.alive) startRun(freshSeed());
     else {
       state.started = true;
       state.paused = !state.paused;

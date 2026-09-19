@@ -131,11 +131,15 @@ class FlyPilot:
         hours, and extinction is measured - but the connectome records no such rate, so the
         number here is chosen, not derived.
 
-        It is also the single most effective number in this task, and it wants to be small. At
-        0.002 the circuit scored a median of 176 frames; at 0.0002 it scores 262, against 148
-        for acting at random. Forgetting an order of magnitude faster than that erases what a
-        run taught before the next run can build on it. The value was chosen on a separate set
-        of validation seeds, never on the seeds the result is reported against.
+        It is the most effective of the constants here, and it wants to be small. At 0.002 the
+        circuit scored a median of 176 frames; at 0.0002 it scored 262, against 148 for acting
+        at random. Forgetting an order of magnitude faster than that erases what a run taught
+        before the next run can build on it.
+
+        Re-swept after mid-air clears began to be rewarded, since this fires once per dopamine
+        event and that change roughly doubled how many there are: 0.0002 won again, ahead of
+        0.0001 and 0.0005. Chosen on validation seeds, never on the seeds results are reported
+        against.
         """
         self.approach += self.recovery * (1.0 - self.approach)
         self.avoid += self.recovery * (1.0 - self.avoid)
@@ -155,27 +159,34 @@ class FlyPilot:
     ) -> Episode:
         """Play one run, learning from it as it goes.
 
-        Dopamine acts only at decision points. While the dino is airborne the arc is committed,
-        nothing is tagged, and - this is the part that looks wrong - what those frames return is
-        deliberately not learned from either, even though a jump lasts thirty-four frames and so
-        most obstacles are both cleared and crashed into while off the ground.
+        Decisions are taken only on the ground, because a mid-air action cannot change the arc.
+        Outcomes are a different matter, and the two are credited asymmetrically.
 
-        Crediting them was tried, because ignoring an outcome looks exactly like a bug. Measured
-        over five training seeds it was much worse: a median of 150 frames against 267, with
-        three of the five seeds collapsing to chance. The reason is that neighbouring gaps share
-        between 77% and 99% of their Kenyon cell code, so punishing a jump that was mistimed by
-        ten pixels also punishes the jump that would have worked. Crediting mid-air crashes
-        roughly doubles the punishment landing on JUMP, it generalises onto the correct jumps,
-        and the circuit stops jumping at all - the learned policies visibly switch to ducking.
+        A jump leaves the ground on the frame it is chosen and the obstacle passes some fifteen
+        frames later, so **every successful jump finishes in the air**. Ignoring those clears
+        meant PAM never fired on a jump at all: after four thousand training runs `avoid` was
+        still exactly 1.0 on all 1,927 cells for JUMP, whose score is approach minus avoid and
+        so could not rise above zero while RUN and DUCK reached +0.998. JUMP did not compete, it
+        merely survived wherever the other two had been punished harder. Rewarding the clear
+        gives the credit to the state the jump was launched from, which is what the trace has
+        been holding all along.
 
-        So jumping is learned by elimination rather than by praise: running into things is
-        punished at the moment of impact, and jumping is what remains.
+        Crashes in mid-air are still not credited, and that is not an oversight. Crediting both
+        was measured across five training seeds and was much worse - a median of 150 frames
+        against 267, three seeds collapsing to chance - because neighbouring gaps share between
+        77% and 99% of their Kenyon cell code, so punishing a jump mistimed by ten pixels also
+        punishes the jump that would have worked, and JUMP is extinguished everywhere. Praise
+        generalising onto a neighbouring jump costs nothing; punishment generalising onto one is
+        what breaks the policy.
         """
         self.forget()
         cleared = 0
         while game.alive and game.frame < max_frames:
             if game.jumping:
-                cleared += int(game.step(dino.RUN).cleared)
+                step = game.step(dino.RUN)
+                cleared += int(step.cleared)
+                if learn and step.cleared:
+                    self._credit(step, reward)
                 continue
 
             code = self.encode(game.glomeruli())
@@ -186,13 +197,7 @@ class FlyPilot:
 
             cleared += int(step.cleared)
             if learn and (step.crashed or step.cleared):
-                if step.crashed:
-                    self.punish()
-                elif reward:
-                    self.reward()
-                else:
-                    self.forget()
-                self.recover()
+                self._credit(step, reward)
         return Episode(frames=game.frame, cleared=cleared)
 
     def save(self, path: Path = MEMORY_PATH) -> Path:
@@ -223,6 +228,15 @@ class FlyPilot:
                 trace_decay=float(memory["trace_decay"]),
                 trace_len=int(memory["trace_len"]),
             )
+
+    def _credit(self, step: dino.Step, reward: bool) -> None:
+        if step.crashed:
+            self.punish()
+        elif reward:
+            self.reward()
+        else:
+            self.forget()
+        self.recover()
 
     def _discharge(self) -> list[tuple[npt.NDArray[np.bool_], int, float]]:
         """Recent decisions carry more of the blame, then the tag is spent."""
